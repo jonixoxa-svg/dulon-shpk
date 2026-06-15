@@ -1,0 +1,10 @@
+# Dependencies
+node_modules
+
+# Production build (Render rebuilds this from source)
+dist
+
+# Local env / editor
+*.local
+.DS_Store
+.vite

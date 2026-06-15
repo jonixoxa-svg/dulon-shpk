@@ -1,0 +1,19 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# When you connect this repo on Render (New > Blueprint), this file
+# auto-configures everything below. No manual settings needed.
+services:
+  - type: web
+    name: dulon-shpk
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    # SPA fallback: serve index.html for any path (harmless with HashRouter,
+    # and future-proofs a switch to BrowserRouter).
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
