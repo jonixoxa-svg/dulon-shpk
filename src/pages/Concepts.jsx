@@ -1,10 +1,24 @@
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import AnimatedSection from '../components/AnimatedSection'
 import { concepts } from '../data/concepts'
 import { projects } from '../data/projects'
 import './Concepts.css'
 
 export default function Concepts() {
+  const location = useLocation()
+
+  useEffect(() => {
+    const id = location.state?.concept
+    if (!id) return
+    const el = document.getElementById(id)
+    if (!el) return
+    const timer = setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [location])
+
   return (
     <div className="concepts-page">
       <div className="page-hero">
@@ -27,6 +41,7 @@ export default function Concepts() {
           return (
             <section
               key={concept.id}
+              id={concept.id}
               className={`concept-block ${isEven ? 'concept-block--normal' : 'concept-block--reverse'}`}
             >
               <div className="container concept-block__inner">

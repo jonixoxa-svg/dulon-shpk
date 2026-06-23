@@ -309,12 +309,21 @@
   margin-bottom: 2.5rem;
 }
 
+.home-concepts__grid > * {
+  display: flex;
+}
+
 .home-concepts__card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   transition: transform var(--t), box-shadow var(--t);
+  text-decoration: none;
+  color: inherit;
 }
 
 .home-concepts__card:hover {
@@ -334,7 +343,24 @@
 }
 
 .home-concepts__card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   padding: 1.5rem;
+}
+
+.home-concepts__card-link {
+  margin-top: auto;
+  padding-top: 1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  transition: color var(--t);
+}
+
+.home-concepts__card:hover .home-concepts__card-link {
+  color: var(--accent-hover);
 }
 
 .home-concepts__card-tag {

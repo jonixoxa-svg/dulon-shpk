@@ -24,7 +24,7 @@ export const concepts = [
     name: 'Penthouse Collection',
     tagline: 'Ekskluzivitet pa kompromis',
     description: 'Koleksioni ynë i kulmit — apartamente luksoze me pamje panoramike, materiale premium të importuara dhe shërbim concierge. Jetesa me standarde ndërkombëtare në zemër të Prishtinës.',
-    image: '/images/dulon/dulon-03.jpg',
+    image: '/images/dulon/dulon-02.jpg',
     features: ['Materiale premium italiane', 'Terrasa private panoramike', 'Concierge service', 'SPA & pishinë private', 'Finishe luksoze'],
     accentColor: '#C4B89A',
     projects: ['Panorama Residence', 'Rezidenca Velania II — Penthouse'],

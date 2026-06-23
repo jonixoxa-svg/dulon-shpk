@@ -6,7 +6,7 @@ import { getFeaturedProjects } from '../data/projects'
 import { concepts } from '../data/concepts'
 import './Home.css'
 
-const HERO_IMAGE = 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920&q=85'
+const HERO_IMAGE = '/images/dulon/dulon-11.jpg'
 
 const STATS = [
   { value: '11+', label: 'Vjet eksperiencë' },
@@ -140,18 +140,21 @@ export default function Home() {
 
           <div className="home-concepts__grid">
             {concepts.map((c, i) => (
-              <AnimatedSection key={c.id} delay={i * 90} className="home-concepts__card">
-                <div
-                  className="home-concepts__card-img"
-                  style={{ backgroundImage: `url(${c.image})` }}
-                />
-                <div className="home-concepts__card-body">
-                  <span className="home-concepts__card-tag" style={{ color: c.accentColor }}>
-                    {c.tagline}
-                  </span>
-                  <h3 className="home-concepts__card-name">{c.name}</h3>
-                  <p className="home-concepts__card-desc">{c.description}</p>
-                </div>
+              <AnimatedSection key={c.id} delay={i * 90}>
+                <Link to="/konceptet" state={{ concept: c.id }} className="home-concepts__card">
+                  <div
+                    className="home-concepts__card-img"
+                    style={{ backgroundImage: `url(${c.image})` }}
+                  />
+                  <div className="home-concepts__card-body">
+                    <span className="home-concepts__card-tag" style={{ color: c.accentColor }}>
+                      {c.tagline}
+                    </span>
+                    <h3 className="home-concepts__card-name">{c.name}</h3>
+                    <p className="home-concepts__card-desc">{c.description}</p>
+                    <span className="home-concepts__card-link">Lexo më shumë →</span>
+                  </div>
+                </Link>
               </AnimatedSection>
             ))}
           </div>
@@ -166,7 +169,7 @@ export default function Home() {
       <section className="home-cta">
         <div
           className="home-cta__bg"
-          style={{ backgroundImage: `url(https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1600&q=80)` }}
+          style={{ backgroundImage: `url(/images/dulon/dulon-02.jpg)` }}
           aria-hidden="true"
         />
         <div className="home-cta__overlay" aria-hidden="true" />

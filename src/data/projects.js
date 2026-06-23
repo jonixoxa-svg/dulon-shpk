@@ -14,11 +14,11 @@ export const projects = [
     conceptLabel: 'Family Living',
     shortDesc: 'Kompleks rezidencial me dizajn bashkëkohor, i vendosur në lagjen e qetë dhe të gjelbërt të Velanisë.',
     description: 'Rezidenca Velania I është projekti ynë i parë emblematik, i përfunduar me sukses në vitin 2022. I vendosur në lagjen prestigjioze të Velanisë, ky kompleks ofron 42 apartamente moderne me pamje panoramike drejt qytetit të Prishtinës.\n\nArkitektura e ndërtesës bashkon estetikën moderne me funksionalitetin maksimal, duke ofruar hapësira jetese të rehatshme dhe elegante. Çdo apartament është projektuar me kujdes të veçantë ndaj detajeve, duke përdorur materiale të cilësisë së lartë dhe teknologji moderne të ndërtimit.\n\nKompleksi disponon parking nëntokësor, ambient të gjelbëruar të gjerë, sallë fitnesi dhe zona të përbashkëta elegante, duke ofruar një standard të lartë jetese për të gjithë banorët.',
-    coverImage: '/images/dulon/dulon-03.jpg',
+    coverImage: '/images/dulon/dulon-02.jpg',
     images: [
-      '/images/dulon/dulon-03.jpg',
-      '/images/dulon/dulon-11.jpg',
       '/images/dulon/dulon-02.jpg',
+      '/images/dulon/dulon-11.jpg',
+      '/images/dulon/dulon-12.jpg',
       '/images/dulon/dulon-09.jpg',
     ],
     floorPlans: ['/images/dulon/dulon-16.jpg'],
@@ -46,11 +46,11 @@ export const projects = [
     conceptLabel: 'Urban Premium',
     shortDesc: 'Vazhdimi i projektit të suksesshëm Velania I, me standard edhe më të lartë dhe pamje spektakolare.',
     description: 'Rezidenca Velania II është projekti ynë i ri, i cili vazhdon traditën e cilësisë të vendosur nga Velania I. Me 56 apartamente premium dhe 10 kate, ky projekt ofron standarde ndërkombëtare ndërtimi të kombinuara me estetikën e rafinuar.\n\nNdërtesa dallohet me arkitekturën e saj bashkëkohore, fasadën e modernizuar dhe hapësirat e gjera të ballkoneve me pamje panoramike drejt qytetit. Çdo apartament integron teknologji inteligjente Smart Home dhe sistemet më moderne të energjisë efiçiente.\n\nData e planifikuar e dorëzimit: gjysma e parë e vitit 2026. Njësitë e para janë tashmë të rezervuara — kontaktoni ekipin tonë të shitjeve për disponibilitetin aktual.',
-    coverImage: '/images/dulon/dulon-02.jpg',
+    coverImage: '/images/dulon/dulon-11.jpg',
     images: [
-      '/images/dulon/dulon-02.jpg',
       '/images/dulon/dulon-11.jpg',
-      '/images/dulon/dulon-03.jpg',
+      '/images/dulon/dulon-02.jpg',
+      '/images/dulon/dulon-10.jpg',
       '/images/dulon/dulon-01.jpg',
     ],
     floorPlans: [
@@ -145,11 +145,11 @@ export const projects = [
     conceptLabel: 'Penthouse Collection',
     shortDesc: 'Apartamente luksoze me pamje panoramike 270° ndaj Prishtinës — jetesa premium pa kompromis.',
     description: 'Panorama Residence është projekti ynë më ambicioz premium, i fokusuar ekskluzivisht në cilësinë më të lartë dhe komfortin maksimal. Me vetëm 35 apartamente në 8 kate, ky projekt garanton privatësi, ekskluzivitet dhe një standard të jetesës ndërkombëtar.\n\nÇdo njësi ofron ballkone të gjera dhe terrasa private me pamje panoramike 270° ndaj Prishtinës. Materialet e përdorura janë të standardit ndërkombëtar — dysheme mermeri nga Italia, pajisje kuzhine nga Gjermani, dhe sisteme sanitare austriake.\n\nData e planifikuar e dorëzimit: Dhjetor 2025. Vetëm disa njësi janë ende të disponueshme.',
-    coverImage: '/images/dulon/dulon-11.jpg',
+    coverImage: '/images/dulon/dulon-13.jpg',
     images: [
       '/images/dulon/dulon-11.jpg',
       '/images/dulon/dulon-01.jpg',
-      '/images/dulon/dulon-03.jpg',
+      '/images/dulon/dulon-02.jpg',
     ],
     floorPlans: [
       '/images/dulon/dulon-21.jpg',
