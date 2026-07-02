@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import '../../config/game_config.dart';
 import '../../game/orbit_dash_game.dart';
 import '../../services/ads/ad_service.dart';
+import '../../services/progression_service.dart';
 import '../../services/storage_service.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/neon_button.dart';
 
-/// Game-over screen: score, best score, rewarded-ad offers (continue once
-/// per run + double score), retry and home. Banner ad at the bottom.
+/// Game-over screen: score, run stats, XP progress, rewarded-ad offers
+/// (continue once per run + double score), retry and home.
+/// Banner ad at the bottom.
 class GameOverOverlay extends StatefulWidget {
   const GameOverOverlay({super.key, required this.game});
 
@@ -117,89 +119,104 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: GameConfig.background.withValues(alpha: 0.82),
+      color: GameConfig.background.withValues(alpha: 0.86),
       child: Column(
         children: [
           Expanded(
             child: SafeArea(
               bottom: false,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Spacer(flex: 2),
-                  const Text(
-                    'GAME OVER',
-                    style: TextStyle(
-                      color: GameConfig.obstacleColor,
-                      fontSize: 34,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 6,
-                      shadows: [
-                        Shadow(
-                            color: GameConfig.obstacleColor, blurRadius: 24),
-                      ],
-                    ),
+              child: SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: MediaQuery.of(context).size.height -
+                        MediaQuery.of(context).padding.top -
+                        60,
                   ),
-                  const Spacer(),
-                  _scoreBlock(),
-                  const Spacer(flex: 2),
-                  if (_canContinue) ...[
-                    NeonButton(
-                      label: 'CONTINUE ($_secondsLeft)',
-                      icon: Icons.play_circle_outline,
-                      colors: const [
-                        GameConfig.orbColor,
-                        GameConfig.obstacleColor,
-                      ],
-                      onPressed: _watchAdToContinue,
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'watch an ad to keep this run',
-                      style: TextStyle(
-                        color: GameConfig.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                  ],
-                  if (!_scoreDoubled && AdService.instance.isRewardedReady)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 18),
-                      child: NeonButton(
-                        label: '2× SCORE',
-                        icon: Icons.ondemand_video,
-                        compact: true,
-                        colors: const [
-                          GameConfig.coreColor,
-                          GameConfig.ballColor,
-                        ],
-                        onPressed: _watchAdToDouble,
-                      ),
-                    ),
-                  Row(
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      NeonButton(
-                        label: 'RETRY',
-                        icon: Icons.refresh,
-                        onPressed: _retry,
+                      const SizedBox(height: 28),
+                      const Text(
+                        'GAME OVER',
+                        style: TextStyle(
+                          color: GameConfig.obstacleColor,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 6,
+                          shadows: [
+                            Shadow(
+                                color: GameConfig.obstacleColor,
+                                blurRadius: 24),
+                          ],
+                        ),
                       ),
-                      const SizedBox(width: 16),
-                      NeonButton(
-                        label: 'HOME',
-                        icon: Icons.home_rounded,
-                        compact: true,
-                        colors: const [
-                          GameConfig.backgroundAccent,
-                          GameConfig.backgroundAccent,
+                      const SizedBox(height: 18),
+                      _scoreBlock(),
+                      const SizedBox(height: 14),
+                      _statsRow(),
+                      const SizedBox(height: 14),
+                      _xpBlock(),
+                      const SizedBox(height: 22),
+                      if (_canContinue) ...[
+                        NeonButton(
+                          label: 'CONTINUE ($_secondsLeft)',
+                          icon: Icons.play_circle_outline,
+                          colors: const [
+                            GameConfig.orbColor,
+                            GameConfig.obstacleColor,
+                          ],
+                          onPressed: _watchAdToContinue,
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'watch an ad to keep this run',
+                          style: TextStyle(
+                            color: GameConfig.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      if (!_scoreDoubled &&
+                          AdService.instance.isRewardedReady)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: NeonButton(
+                            label: '2× SCORE',
+                            icon: Icons.ondemand_video,
+                            compact: true,
+                            colors: const [
+                              GameConfig.coreColor,
+                              GameConfig.ballColor,
+                            ],
+                            onPressed: _watchAdToDouble,
+                          ),
+                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          NeonButton(
+                            label: 'RETRY',
+                            icon: Icons.refresh,
+                            onPressed: _retry,
+                          ),
+                          const SizedBox(width: 16),
+                          NeonButton(
+                            label: 'HOME',
+                            icon: Icons.home_rounded,
+                            compact: true,
+                            colors: const [
+                              GameConfig.backgroundAccent,
+                              GameConfig.backgroundAccent,
+                            ],
+                            onPressed: _home,
+                          ),
                         ],
-                        onPressed: _home,
                       ),
+                      const SizedBox(height: 24),
                     ],
                   ),
-                  const Spacer(flex: 2),
-                ],
+                ),
               ),
             ),
           ),
@@ -214,7 +231,7 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
       children: [
         if (game.isNewBest)
           const Padding(
-            padding: EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.only(bottom: 6),
             child: Text(
               '• NEW BEST •',
               style: TextStyle(
@@ -229,7 +246,7 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
           '${game.finalScore}',
           style: TextStyle(
             color: GameConfig.textPrimary,
-            fontSize: 72,
+            fontSize: 64,
             fontWeight: FontWeight.w900,
             shadows: [
               Shadow(
@@ -251,13 +268,95 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
               letterSpacing: 3,
             ),
           ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
           'BEST  ${StorageService.instance.highScore}',
           style: const TextStyle(
             color: GameConfig.textSecondary,
-            fontSize: 16,
+            fontSize: 15,
             letterSpacing: 2,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statsRow() {
+    Widget stat(String label, String value) => Column(
+          children: [
+            Text(value,
+                style: const TextStyle(
+                  color: GameConfig.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                )),
+            Text(label,
+                style: const TextStyle(
+                  color: GameConfig.textSecondary,
+                  fontSize: 10,
+                  letterSpacing: 2,
+                )),
+          ],
+        );
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        stat('SECTOR', '${game.sectorReached}'),
+        const SizedBox(width: 28),
+        stat('ORBS', '${game.orbsThisRun}'),
+        const SizedBox(width: 28),
+        stat('MAX COMBO', '×${game.maxComboThisRun}'),
+      ],
+    );
+  }
+
+  Widget _xpBlock() {
+    final prog = ProgressionService.instance;
+    final fraction =
+        (prog.xpIntoLevel / prog.xpForNextLevel).clamp(0.0, 1.0);
+    return Column(
+      children: [
+        if (game.leveledUp)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: Text(
+              'LEVEL UP!',
+              style: TextStyle(
+                color: GameConfig.pulseColor,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 4,
+                shadows: [Shadow(color: GameConfig.pulseColor, blurRadius: 16)],
+              ),
+            ),
+          ),
+        Text(
+          '+${game.xpGained} XP   •   LEVEL ${prog.level}',
+          style: const TextStyle(
+            color: GameConfig.textSecondary,
+            fontSize: 12,
+            letterSpacing: 2,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          width: 220,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: fraction),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => LinearProgressIndicator(
+                value: value,
+                minHeight: 6,
+                backgroundColor: Colors.white.withValues(alpha: 0.08),
+                valueColor:
+                    const AlwaysStoppedAnimation(GameConfig.coreColor),
+              ),
+            ),
           ),
         ),
       ],

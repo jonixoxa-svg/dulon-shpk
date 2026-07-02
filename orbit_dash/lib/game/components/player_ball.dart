@@ -5,10 +5,13 @@ import 'package:flame/particles.dart';
 import 'package:flutter/material.dart';
 
 import '../../config/game_config.dart';
+import '../../services/progression_service.dart';
 import '../orbit_dash_game.dart';
 
 /// The player: a glowing ball orbiting the center. Tapping the screen
 /// reverses its direction (handled by the game, which calls [reverse]).
+/// Its colors come from the currently selected unlockable skin, and it
+/// shows a rotating aura while a shield is held.
 class PlayerBall extends PositionComponent
     with HasGameReference<OrbitDashGame> {
   PlayerBall() : super(priority: 10, anchor: Anchor.center);
@@ -23,8 +26,11 @@ class PlayerBall extends PositionComponent
 
   double _trailTimer = 0;
   double _blinkTimer = 0;
+  double _auraSpin = 0;
 
   double get radius => game.shortestSide * GameConfig.ballRadiusFactor;
+
+  BallSkin get skin => ProgressionService.instance.currentSkin;
 
   static final _glowPaint = Paint()
     ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
@@ -48,8 +54,10 @@ class PlayerBall extends PositionComponent
       orbitAngle += direction * speed * dt;
     }
 
-    position = game.center + Vector2(cos(orbitAngle), sin(orbitAngle)) * game.orbitRadius;
+    position =
+        game.center + Vector2(cos(orbitAngle), sin(orbitAngle)) * game.orbitRadius;
     _blinkTimer += dt;
+    _auraSpin += dt * 2.4;
 
     if (visible && game.state == GameState.playing) {
       _trailTimer += dt;
@@ -63,11 +71,34 @@ class PlayerBall extends PositionComponent
   @override
   void render(Canvas canvas) {
     if (!visible) return;
-    // Blink while invincible after a rewarded continue.
+    // Blink while invincible after a rewarded continue / shield save.
     if (game.isInvincible && (_blinkTimer * 10).floor().isEven) return;
 
-    _glowPaint.color = GameConfig.ballGlow.withValues(alpha: 0.8);
-    _corePaint.color = GameConfig.ballColor;
+    // Shield aura: rotating dashed ring.
+    if (game.hasShield) {
+      final auraR = radius * 1.9;
+      final aura = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round
+        ..color = GameConfig.shieldColor.withValues(alpha: 0.9);
+      final rect = Rect.fromCircle(center: Offset.zero, radius: auraR);
+      for (var i = 0; i < 4; i++) {
+        canvas.drawArc(rect, _auraSpin + i * pi / 2, pi / 3.2, false, aura);
+      }
+      canvas.drawCircle(
+        Offset.zero,
+        auraR,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 6
+          ..color = GameConfig.shieldColor.withValues(alpha: 0.18)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+    }
+
+    _glowPaint.color = skin.glow.withValues(alpha: 0.8);
+    _corePaint.color = skin.core;
     canvas.drawCircle(Offset.zero, radius * 1.7, _glowPaint);
     canvas.drawCircle(Offset.zero, radius, _corePaint);
     canvas.drawCircle(Offset(-radius * 0.25, -radius * 0.25), radius * 0.4,
@@ -76,6 +107,7 @@ class PlayerBall extends PositionComponent
 
   void _emitTrail() {
     final r = radius;
+    final color = skin.core;
     game.add(ParticleSystemComponent(
       position: position.clone(),
       priority: 9,
@@ -83,9 +115,11 @@ class PlayerBall extends PositionComponent
         lifespan: 0.4,
         renderer: (canvas, particle) {
           final fade = 1 - particle.progress;
-          final paint = Paint()
-            ..color = GameConfig.ballColor.withValues(alpha: 0.35 * fade);
-          canvas.drawCircle(Offset.zero, r * 0.8 * fade, paint);
+          canvas.drawCircle(
+            Offset.zero,
+            r * 0.8 * fade,
+            Paint()..color = color.withValues(alpha: 0.35 * fade),
+          );
         },
       ),
     ));

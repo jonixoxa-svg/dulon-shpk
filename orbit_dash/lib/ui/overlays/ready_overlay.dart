@@ -16,6 +16,7 @@ class ReadyOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Stack(
+        fit: StackFit.expand,
         children: [
           Align(
             alignment: Alignment.topLeft,
@@ -46,7 +47,8 @@ class ReadyOverlay extends StatelessWidget {
                 SizedBox(height: 12),
                 Text(
                   'tap anywhere to reverse direction\n'
-                  'dodge the pink arcs • grab the gold orbs',
+                  'dodge the arcs, beams and shockwaves\n'
+                  'grab orbs to build your combo — chase power-ups',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: GameConfig.textSecondary,

@@ -5,9 +5,14 @@ the **Flame** game engine, monetized with **Google AdMob**, and ready to
 publish on Google Play.
 
 **How it plays:** a neon ball orbits a center point. Tap anywhere to
-reverse its direction. Dodge the pink arcs, grab the gold orbs (+5 points
-each), survive as long as you can. One hit and it's game over. The game
-gets faster the longer you last.
+reverse its direction — that one tap is the whole control scheme. Dodge
+drifting arcs, hunter arcs that chase you, splitters that break in two,
+sweeping laser beams and expanding shockwaves. Grab gold orbs to build a
+combo multiplier (up to ×5), shave past obstacles for near-miss bonuses,
+and catch power-ups: Shield, Slow-Mo, Magnet and Frenzy (2× score).
+Survival is paced in 20-second sectors that keep escalating. Every run
+earns XP toward player levels that unlock six ball skins. One hit — unless
+you're shielded — and it's game over.
 
 ---
 

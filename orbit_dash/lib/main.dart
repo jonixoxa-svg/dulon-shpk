@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'config/game_config.dart';
 import 'services/audio_service.dart';
+import 'services/progression_service.dart';
 import 'services/storage_service.dart';
 import 'ui/screens/main_menu_screen.dart';
 
@@ -26,6 +27,7 @@ Future<void> main() async {
   // Local storage + sounds are fast and offline; ads/consent are started
   // later from the main menu so nothing blocks startup.
   await StorageService.instance.init();
+  await ProgressionService.instance.init();
   AudioService.instance.init(); // fire and forget
 
   runApp(const OrbitDashApp());

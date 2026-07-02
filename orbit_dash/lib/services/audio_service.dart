@@ -2,7 +2,7 @@ import 'package:flame_audio/flame_audio.dart';
 
 import 'storage_service.dart';
 
-/// Plays the game's short placeholder sound effects.
+/// Plays the game's short synthesized sound effects.
 ///
 /// The .wav files in assets/audio/ are tiny generated placeholder sounds
 /// (see tool/generate_sounds.py). Swap them for nicer ones any time —
@@ -15,10 +15,21 @@ class AudioService {
 
   static final AudioService instance = AudioService._();
 
-  static const _tap = 'tap.wav';
-  static const _orb = 'orb.wav';
-  static const _death = 'death.wav';
-  static const _button = 'button.wav';
+  static const _files = [
+    'tap.wav',
+    'orb1.wav',
+    'orb2.wav',
+    'orb3.wav',
+    'orb4.wav',
+    'orb5.wav',
+    'whoosh.wav',
+    'powerup.wav',
+    'shield_break.wav',
+    'sector.wav',
+    'levelup.wav',
+    'death.wav',
+    'button.wav',
+  ];
 
   bool _loaded = false;
 
@@ -31,20 +42,32 @@ class AudioService {
   Future<void> init() async {
     if (_loaded) return;
     try {
-      await FlameAudio.audioCache.loadAll([_tap, _orb, _death, _button]);
+      await FlameAudio.audioCache.loadAll(_files);
       _loaded = true;
     } catch (_) {
       // No audio available — stay silent.
     }
   }
 
-  void playTap() => _play(_tap, volume: 0.55);
+  void playTap() => _play('tap.wav', volume: 0.55);
 
-  void playOrb() => _play(_orb, volume: 0.8);
+  /// Pitch rises with the combo level (1..5) for that slot-machine feel.
+  void playOrb(int combo) =>
+      _play('orb${combo.clamp(1, 5)}.wav', volume: 0.8);
 
-  void playDeath() => _play(_death, volume: 0.9);
+  void playNearMiss() => _play('whoosh.wav', volume: 0.5);
 
-  void playButton() => _play(_button, volume: 0.5);
+  void playPowerUp() => _play('powerup.wav', volume: 0.75);
+
+  void playShieldBreak() => _play('shield_break.wav', volume: 0.85);
+
+  void playSector() => _play('sector.wav', volume: 0.7);
+
+  void playLevelUp() => _play('levelup.wav', volume: 0.8);
+
+  void playDeath() => _play('death.wav', volume: 0.9);
+
+  void playButton() => _play('button.wav', volume: 0.5);
 
   void _play(String file, {double volume = 1.0}) {
     if (!soundOn) return;

@@ -7,12 +7,14 @@ import '../../config/game_config.dart';
 import '../orbit_dash_game.dart';
 
 /// A collectible bonus point sitting on the orbit ring. Worth
-/// [GameConfig.orbScore] points. Despawns on its own if not collected.
+/// [GameConfig.orbScore] × combo points. Despawns on its own if not
+/// collected. While the magnet power-up is active, nearby orbs slide
+/// along the ring toward the player.
 class Orb extends PositionComponent with HasGameReference<OrbitDashGame> {
   Orb({required this.orbitAngle}) : super(priority: 5, anchor: Anchor.center);
 
-  /// Angular position on the ring, in radians.
-  final double orbitAngle;
+  /// Angular position on the ring, in radians. Mutable for the magnet pull.
+  double orbitAngle;
 
   bool collected = false;
 
@@ -41,6 +43,14 @@ class Orb extends PositionComponent with HasGameReference<OrbitDashGame> {
   @override
   void update(double dt) {
     _age += dt;
+
+    if (game.magnetActive && game.state == GameState.playing) {
+      final delta = shortestAngleDelta(game.ball.orbitAngle, orbitAngle);
+      if (delta.abs() < GameConfig.magnetRange) {
+        orbitAngle += delta.sign * min(delta.abs(), 2.2 * dt);
+      }
+    }
+
     position =
         game.center + Vector2(cos(orbitAngle), sin(orbitAngle)) * game.orbitRadius;
     if (_age >= _lifespan) removeFromParent();

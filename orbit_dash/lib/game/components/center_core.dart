@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import '../../config/game_config.dart';
 import '../orbit_dash_game.dart';
 
-/// Softly pulsing glowing dot at the orbit center.
+/// Softly pulsing glowing dot at the orbit center. It reacts to the combo:
+/// higher combo = faster, bigger, warmer pulse.
 class CenterCore extends Component with HasGameReference<OrbitDashGame> {
   CenterCore() : super(priority: 1);
 
@@ -21,12 +22,17 @@ class CenterCore extends Component with HasGameReference<OrbitDashGame> {
 
   @override
   void render(Canvas canvas) {
-    final pulse = 0.85 + 0.15 * sin(_t * 2.4);
-    final r = game.shortestSide * 0.045 * pulse;
+    final combo = game.combo;
+    final excitement = (combo - 1) / (GameConfig.comboMax - 1);
+    final pulse = 0.85 + (0.15 + 0.10 * excitement) * sin(_t * (2.4 + 2.2 * excitement));
+    final r = game.shortestSide * (0.045 + 0.008 * excitement) * pulse;
     final c = game.center.toOffset();
 
-    _glowPaint.color = GameConfig.coreColor.withValues(alpha: 0.55);
-    _corePaint.color = GameConfig.coreColor;
+    final color = Color.lerp(
+        GameConfig.coreColor, GameConfig.frenzyColor, excitement * 0.6)!;
+
+    _glowPaint.color = color.withValues(alpha: 0.55);
+    _corePaint.color = color;
     canvas.drawCircle(c, r * 1.6, _glowPaint);
     canvas.drawCircle(c, r, _corePaint);
     canvas.drawCircle(
