@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05080f">
+<title>Orbit Maze</title>
+<link rel="icon" href="data:,">
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#05080f;overflow:hidden;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  canvas{display:block;touch-action:none}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<script>
+'use strict';
+/* ============================================================
+   ORBIT MAZE — a one-finger neon maze game.
+   Drag the orb through rotating rings, pulsing circles and
+   orbiting hazards to the goal portal. 30 levels, 3 chapters.
+   Single file, no dependencies, no storage (session progress).
+   ============================================================ */
+
+// ---------- tiny utils ----------
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp  = (a, b, t) => a + (b - a) * t;
+const dist2 = (ax, ay, bx, by) => { const dx = ax-bx, dy = ay-by; return dx*dx + dy*dy; };
+const dist  = (ax, ay, bx, by) => Math.sqrt(dist2(ax, ay, bx, by));
+const angNorm = a => { a %= TAU; return a < 0 ? a + TAU : a; };
+const angDist = (a, b) => { const d = angNorm(a - b); return d > Math.PI ? TAU - d : d; };
+const easeOutBack = t => { const c = 1.70158; const u = t - 1; return 1 + (c+1)*u*u*u + c*u*u; };
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+let _seed = 7;
+const rnd = () => (_seed = (_seed * 16807) % 2147483647) / 2147483647; // deterministic decor
+
+// ---------- virtual space ----------
+const VW = 1000, VH = 1600;                 // portrait design space
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let scrW = 0, scrH = 0, dpr = 1, scl = 1, offX = 0, offY = 0;
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  scrW = window.innerWidth; scrH = window.innerHeight;
+  cv.width = scrW * dpr; cv.height = scrH * dpr;
+  cv.style.width = scrW + 'px'; cv.style.height = scrH + 'px';
+  scl = Math.min(scrW / VW, scrH / VH);
+  offX = (scrW - VW * scl) / 2;
+  offY = (scrH - VH * scl) / 2;
+}
+window.addEventListener('resize', resize);
+resize();
+const toVX = px => (px - offX) / scl;
+const toVY = py => (py - offY) / scl;
+
+// ---------- themes (chapters shift every 10 levels) ----------
+const THEMES = [
+  { bg:'#060a14', bg2:'#0d1626', wall:'#1de5ff', hot:'#ff2d95', warm:'#ffb347',
+    good:'#7cffb0', text:'#eef4ff', dim:'#8fa3c8' },
+  { bg:'#0c0714', bg2:'#1a0f26', wall:'#ff9e40', hot:'#b388ff', warm:'#ff5470',
+    good:'#7cffb0', text:'#fff3ea', dim:'#c0a8d8' },
+  { bg:'#04120e', bg2:'#0a231c', wall:'#69ff8f', hot:'#ff4f9e', warm:'#ffe066',
+    good:'#8fd6ff', text:'#eafff2', dim:'#8fc8ae' },
+];
+let theme = THEMES[0];
+const themeFor = lv => THEMES[Math.min(Math.floor((lv - 1) / 10), THEMES.length - 1)];
+
+// ---------- audio (Web Audio API, all synthesized) ----------
+const AudioSys = {
+  ac: null, master: null, muted: false, humGain: null,
+  ensure() {
+    if (this.ac) { if (this.ac.state === 'suspended') this.ac.resume(); return; }
+    try {
+      this.ac = new (window.AudioContext || window.webkitAudioContext)();
+      this.master = this.ac.createGain();
+      this.master.gain.value = this.muted ? 0 : 1;
+      this.master.connect(this.ac.destination);
+      this.startHum();
+    } catch (e) { this.ac = null; }
+  },
+  setMuted(m) {
+    this.muted = m;
+    if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 1, this.ac.currentTime, 0.05);
+  },
+  startHum() { // soft ambient pad: two detuned sines + slow LFO
+    const ac = this.ac;
+    const g = ac.createGain(); g.gain.value = 0.018; g.connect(this.master);
+    this.humGain = g;
+    for (const f of [55, 55.6, 110.3]) {
+      const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+      o.connect(g); o.start();
+    }
+    const lfo = ac.createOscillator(); lfo.frequency.value = 0.07;
+    const lg = ac.createGain(); lg.gain.value = 0.008;
+    lfo.connect(lg); lg.connect(g.gain); lfo.start();
+  },
+  tone(freq, dur, { type='sine', vol=0.2, slide=0, delay=0 } = {}) {
+    if (!this.ac) return;
+    const ac = this.ac, t0 = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t0 + dur);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  },
+  noise(dur, { vol=0.25, delay=0 } = {}) {
+    if (!this.ac) return;
+    const ac = this.ac, t0 = ac.currentTime + delay;
+    const n = Math.floor(ac.sampleRate * dur);
+    const buf = ac.createBuffer(1, n, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const g = ac.createGain(); g.gain.value = vol;
+    const f = ac.createBiquadFilter(); f.type = 'lowpass';
+    f.frequency.setValueAtTime(3200, t0);
+    f.frequency.exponentialRampToValueAtTime(300, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t0);
+  },
+  click()  { this.tone(340, 0.06, { type:'triangle', vol:0.15, slide:-120 }); },
+  grab()   { this.tone(220, 0.08, { type:'sine', vol:0.10, slide:90 }); },
+  death()  { this.noise(0.4, { vol:0.4 }); this.tone(300, 0.4, { type:'sawtooth', vol:0.12, slide:-240 }); },
+  key()    { this.tone(880, 0.09, { vol:0.18 }); this.tone(1320, 0.14, { vol:0.18, delay:0.07 }); },
+  tele()   { this.tone(500, 0.18, { type:'triangle', vol:0.2, slide:700 }); },
+  win()    { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.28, { vol:0.16, delay: i*0.09 })); },
+  star(i)  { this.tone(700 + i*180, 0.14, { vol:0.2 }); },
+  tick()   { this.tone(1200, 0.03, { type:'square', vol:0.05 }); },
+};
+
+// ---------- entity constructors (plain data, systems act on them) ----------
+// Rotating / static ring with gaps. gaps: [{a: centerAngle, w: width(rad)}]
+const R  = (x, y, r, speed, gaps, o={}) =>
+  ({ k:'ring', x, y, r, th:o.th ?? 22, speed, rot:o.rot ?? 0, gaps, ghost:o.ghost ?? false });
+// Pulsing solid circle.
+const P  = (x, y, base, amp, speed, o={}) =>
+  ({ k:'pulse', x, y, base, amp, speed, ph:o.ph ?? 0 });
+// Obstacle ball orbiting a point.
+const O  = (x, y, R_, speed, o={}) =>
+  ({ k:'orb', x, y, R:R_, speed, r:o.r ?? 20, ph:o.ph ?? 0, n:o.n ?? 1 });
+// Collectible key.
+const K  = (x, y) => ({ k:'key', x, y, r:20, got:false });
+// Gravity well: pulls the orb, lethal core.
+const W  = (x, y, range, pull, o={}) => ({ k:'well', x, y, range, pull, core:o.core ?? 26 });
+// Teleporter pair.
+const T  = (x1, y1, x2, y2) => ({ k:'tele', x1, y1, x2, y2, r:34, cd:0 });
+// Chasing hazard.
+const C  = (x, y, speed) => ({ k:'chaser', x, y, hx:x, hy:y, speed, r:22 });
+
+// ---------- 30 levels ----------
+// Coordinates in 1000×1600 space; start near the bottom, goal near the top.
+// Gap widths / speeds follow the difficulty table in the README of the run.
+const S = (x=500, y=1430) => ({ x, y });
+const G = (x=500, y=260, r=46) => ({ x, y, r });
+const LEVELS = [
+ // ── Chapter 1: learn (1-10) ──
+ { par: 8, msg:'DRAG THE ORB TO THE PORTAL', s:S(), g:G(), els:[
+   R(500, 260, 190, 0, [{a: Math.PI/2, w: 2.6}]) ]},
+ { par: 10, msg:'RINGS ROTATE — USE THE GAP', s:S(), g:G(), els:[
+   R(500, 260, 200, 0.35, [{a: 0, w: 1.9}]) ]},
+ { par: 12, s:S(), g:G(), els:[
+   R(500, 900, 260, 0.4, [{a: 1.2, w: 1.5}, {a: 4.2, w: 1.5}]),
+   R(500, 260, 190, -0.45, [{a: 0, w: 1.6}]) ]},
+ { par: 14, s:S(), g:G(), els:[
+   R(500, 950, 300, 0.5, [{a: 0, w: 1.3}, {a: Math.PI, w: 1.3}]),
+   R(500, 950, 170, -0.55, [{a: 1.5, w: 1.3}]),
+   R(500, 260, 185, 0.5, [{a: 3, w: 1.4}]) ]},
+ { par: 14, msg:'NEW — PULSING CIRCLES', s:S(), g:G(), els:[     // L5
+   P(330, 1050, 70, 45, 1.6), P(670, 1050, 70, 45, 1.6, {ph: Math.PI}),
+   P(500, 640, 80, 50, 1.9, {ph: 1}),
+   R(500, 260, 190, 0.55, [{a: 0, w: 1.3}]) ]},
+ { par: 16, s:S(), g:G(), els:[
+   R(500, 1100, 240, 0.6, [{a: 0, w: 1.2}, {a: Math.PI, w: 1.2}]),
+   P(500, 700, 90, 55, 2.1),
+   P(230, 480, 60, 40, 1.7, {ph: 2}), P(770, 480, 60, 40, 1.7, {ph: 4}),
+   R(500, 260, 185, -0.6, [{a: 2, w: 1.25}]) ]},
+ { par: 18, s:S(), g:G(), els:[
+   R(500, 1050, 320, 0.55, [{a: 1, w: 1.1}, {a: 4.1, w: 1.1}]),
+   R(500, 1050, 180, -0.65, [{a: 0, w: 1.15}]),
+   P(500, 560, 85, 55, 2.2),
+   R(500, 260, 190, 0.7, [{a: 3, w: 1.15}]) ]},
+ { par: 18, s:S(), g:G(), els:[
+   P(500, 1180, 110, 70, 1.8),
+   R(500, 820, 260, -0.7, [{a: 0, w: 1.05}, {a: Math.PI, w: 1.05}]),
+   P(260, 500, 65, 45, 2.4, {ph:1}), P(740, 500, 65, 45, 2.4, {ph:2.5}),
+   R(500, 260, 185, 0.75, [{a: 1, w: 1.1}]) ]},
+ { par: 20, s:S(), g:G(), els:[
+   R(500, 1150, 280, 0.7, [{a: 2, w: 1.0}, {a: 5, w: 1.0}]),
+   R(500, 700, 240, -0.75, [{a: 0, w: 1.0}, {a: Math.PI, w: 1.0}]),
+   P(500, 700, 70, 45, 2.4),
+   R(500, 260, 190, 0.8, [{a: 4, w: 1.05}]) ]},
+ { par: 24, msg:'NEW — ORBITING HAZARDS', s:S(), g:G(500, 300), els:[   // L10 boss
+   O(500, 1150, 220, 1.1, {n:2}),
+   R(500, 300, 330, 0.6, [{a: 0, w: 0.95}, {a: Math.PI, w: 0.95}]),
+   R(500, 300, 235, -0.7, [{a: 1.5, w: 0.95}]),
+   R(500, 300, 145, 0.85, [{a: 3.5, w: 1.0}]) ]},
+ // ── Chapter 2: pressure (11-20) ──
+ { par: 20, s:S(), g:G(), els:[
+   O(500, 1100, 250, 1.3, {n:3}),
+   P(500, 640, 90, 60, 2.4),
+   R(500, 260, 195, 0.85, [{a: 0, w: 0.9}]) ]},
+ { par: 22, s:S(), g:G(), els:[
+   R(500, 1150, 300, 0.8, [{a: 1, w: 0.9}, {a: 4.1, w: 0.9}]),
+   O(500, 760, 190, -1.5, {n:2}),
+   O(500, 760, 90, 1.9),
+   R(500, 260, 190, -0.9, [{a: 2, w: 0.9}]) ]},
+ { par: 22, s:S(), g:G(), els:[
+   P(310, 1150, 80, 55, 2.6), P(690, 1150, 80, 55, 2.6, {ph: Math.PI}),
+   O(500, 800, 230, 1.6, {n:2, ph: 0.5}),
+   R(500, 470, 210, 0.9, [{a: 0, w: 0.85}, {a: Math.PI, w: 0.85}]),
+   R(500, 260, 130, -1.0, [{a: 1, w: 0.95}]) ]},
+ { par: 24, s:S(), g:G(), els:[
+   R(500, 1200, 260, -0.95, [{a: 0, w: 0.85}]),
+   O(500, 880, 200, 1.7, {n:3}),
+   P(500, 560, 95, 60, 2.7),
+   R(500, 260, 190, 1.0, [{a: 3, w: 0.85}]) ]},
+ { par: 30, msg:'NEW — COLLECT THE KEYS', s:S(), g:G(), keys:[K(180, 900), K(820, 900)], els:[  // L15
+   O(500, 900, 260, 1.4, {n:2}),
+   R(180, 900, 120, 0.9, [{a: 0, w: 1.1}]),
+   R(820, 900, 120, -0.9, [{a: Math.PI, w: 1.1}]),
+   R(500, 260, 190, 1.0, [{a: 0, w: 0.85}]) ]},
+ { par: 30, s:S(), g:G(), keys:[K(500, 1000)], els:[
+   R(500, 1000, 170, 1.1, [{a: 0, w: 0.8}, {a: Math.PI, w: 0.8}]),
+   R(500, 1000, 290, -0.85, [{a: 1.5, w: 0.85}]),
+   P(250, 560, 70, 45, 2.8), P(750, 560, 70, 45, 2.8, {ph:2}),
+   R(500, 260, 185, -1.05, [{a: 2, w: 0.8}]) ]},
+ { par: 32, s:S(), g:G(), keys:[K(200, 1250), K(800, 1250), K(500, 620)], els:[
+   O(500, 1250, 240, 1.8, {n:2}),
+   R(500, 620, 150, 1.0, [{a: 0, w: 0.85}]),
+   O(500, 620, 260, -1.5, {n:2, ph:1}),
+   R(500, 260, 185, 1.1, [{a: 4, w: 0.8}]) ]},
+ { par: 30, s:S(), g:G(), keys:[K(500, 870)], els:[
+   R(500, 870, 200, 1.15, [{a: 0, w: 0.75}, {a: Math.PI, w: 0.75}]),
+   R(500, 870, 320, -0.9, [{a: 1, w: 0.8}, {a: 4.1, w: 0.8}]),
+   P(500, 470, 80, 55, 3.0),
+   R(500, 260, 175, -1.15, [{a: 0, w: 0.78}]) ]},
+ { par: 32, s:S(), g:G(), keys:[K(260, 480), K(740, 480)], els:[
+   R(500, 1150, 280, 1.05, [{a: 2, w: 0.78}, {a: 5.1, w: 0.78}]),
+   O(500, 780, 210, -1.9, {n:3}),
+   P(260, 480, 55, 38, 3.1, {ph:1}), P(740, 480, 55, 38, 3.1, {ph:2.7}),
+   R(500, 260, 180, 1.2, [{a: 1, w: 0.75}]) ]},
+ { par: 36, msg:'NEW — GRAVITY WELLS', s:S(), g:G(500, 300), keys:[K(500, 1020)], els:[  // L20 boss
+   W(280, 700, 300, 240), W(720, 700, 300, 240),
+   R(500, 1020, 180, 1.2, [{a: 0, w: 0.75}]),
+   R(500, 300, 330, 0.9, [{a: 0, w: 0.72}, {a: Math.PI, w: 0.72}]),
+   R(500, 300, 230, -1.05, [{a: 1.5, w: 0.72}]),
+   R(500, 300, 140, 1.25, [{a: 3.5, w: 0.8}]) ]},
+ // ── Chapter 3: mastery (21-30) ──
+ { par: 28, s:S(), g:G(), els:[
+   W(500, 900, 340, 260),
+   R(500, 900, 250, 1.15, [{a: 0, w: 0.7}, {a: Math.PI, w: 0.7}]),
+   O(500, 480, 170, 2.0, {n:2}),
+   R(500, 260, 175, -1.25, [{a: 2, w: 0.72}]) ]},
+ { par: 32, s:S(), g:G(), keys:[K(500, 700)], els:[
+   W(250, 1150, 260, 230), W(750, 1150, 260, 230),
+   P(500, 1150, 90, 60, 3.2),
+   R(500, 700, 190, -1.3, [{a: 0, w: 0.68}, {a: Math.PI, w: 0.68}]),
+   R(500, 260, 180, 1.3, [{a: 3, w: 0.7}]) ]},
+ { par: 34, s:S(), g:G(), els:[
+   O(500, 1150, 260, 2.2, {n:3}),
+   W(500, 760, 300, 250),
+   R(500, 760, 200, 1.25, [{a: 1, w: 0.68}]),
+   R(500, 420, 230, -1.2, [{a: 0, w: 0.66}, {a: Math.PI, w: 0.66}]),
+   R(500, 260, 120, 1.35, [{a: 2, w: 0.75}]) ]},
+ { par: 36, s:S(), g:G(), keys:[K(180, 620), K(820, 620)], els:[
+   R(500, 1200, 270, -1.25, [{a: 0, w: 0.66}]),
+   O(500, 860, 230, 2.3, {n:2}),
+   W(500, 620, 280, 260),
+   P(180, 620, 55, 40, 3.4, {ph:1}), P(820, 620, 55, 40, 3.4, {ph:2}),
+   R(500, 260, 175, 1.35, [{a: 5, w: 0.66}]) ]},
+ { par: 40, tl: 45, msg:'NEW — TELEPORTERS + TIME LIMIT', s:S(), g:G(), tps:[T(500, 1180, 500, 700)], els:[  // L25
+   R(500, 1180, 150, 0, [{a: Math.PI/2, w: 1.6}]),
+   R(500, 940, 420, 0, [{a: 0, w: 0.001}]),          // solid wall — teleport past it
+   O(500, 700, 180, 2.0, {n:2}),
+   R(500, 260, 180, 1.3, [{a: 0, w: 0.68}]) ]},
+ { par: 42, tl: 50, s:S(), g:G(), tps:[T(220, 1250, 780, 860), T(220, 620, 780, 330)], els:[
+   R(220, 1250, 120, 0.9, [{a: 0, w: 1.0}]),
+   R(780, 860, 160, -1.2, [{a: 2, w: 0.8}]),
+   O(500, 620, 240, 2.4, {n:3}),
+   R(220, 620, 120, 1.2, [{a: 4, w: 0.9}]),
+   W(500, 330, 240, 240) ]},
+ { par: 38, msg:'CAREFUL — SOME WALLS ARE INVISIBLE', s:S(), g:G(), els:[  // L27
+   R(500, 1100, 260, 1.1, [{a: 0, w: 0.7}], {ghost:true}),
+   P(500, 720, 90, 60, 3.2),
+   R(500, 460, 220, -1.2, [{a: 1, w: 0.66}], {ghost:true}),
+   R(500, 260, 130, 1.35, [{a: 3, w: 0.7}]) ]},
+ { par: 44, tl: 55, s:S(), g:G(), keys:[K(500, 950)], els:[
+   R(500, 1230, 240, 1.3, [{a: 0, w: 0.62}, {a: Math.PI, w: 0.62}]),
+   O(500, 950, 200, 2.5, {n:3}),
+   R(500, 950, 330, -1.15, [{a: 2, w: 0.64}], {ghost:true}),
+   W(260, 520, 240, 250),
+   R(500, 260, 175, 1.4, [{a: 1, w: 0.62}]) ]},
+ { par: 46, tl: 55, s:S(), g:G(), keys:[K(230, 1100), K(770, 1100)], els:[
+   O(500, 1100, 300, 2.6, {n:2}),
+   P(230, 1100, 55, 40, 3.6, {ph:2}), P(770, 1100, 55, 40, 3.6),
+   R(500, 680, 250, 1.35, [{a: 0, w: 0.6}, {a: Math.PI, w: 0.6}], {ghost:true}),
+   W(500, 430, 220, 260),
+   R(500, 260, 150, -1.45, [{a: 2, w: 0.6}]) ]},
+ { par: 55, msg:'FINALE — IT HUNTS YOU', s:S(), g:G(500, 300), keys:[K(500, 1050)], chaser:C(500, 120, 130), els:[ // L30
+   W(240, 800, 260, 250), W(760, 800, 260, 250),
+   R(500, 1050, 170, 1.35, [{a: 0, w: 0.62}]),
+   R(500, 300, 340, 1.0, [{a: 0, w: 0.6}, {a: Math.PI, w: 0.6}]),
+   R(500, 300, 240, -1.2, [{a: 1.5, w: 0.6}]),
+   R(500, 300, 145, 1.45, [{a: 3.5, w: 0.68}]) ]},
+];
+
+// ---------- session progress (in-memory only) ----------
+const progress = LEVELS.map((_, i) => ({ unlocked: i === 0, stars: 0, best: 0 }));
+const totalStars = () => progress.reduce((s, p) => s + p.stars, 0);
+
+// ---------- particles ----------
+const parts = [];
+function burst(x, y, color, n, spd, life) {
+  for (let i = 0; i < n && parts.length < 220; i++) {
+    const a = Math.random() * TAU, v = spd * (0.3 + Math.random());
+    parts.push({ x, y, vx: Math.cos(a)*v, vy: Math.sin(a)*v,
+      life, t: 0, r: 3 + Math.random()*5, color });
+  }
+}
+function stepParts(dt) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= (1 - 2.2*dt); p.vy *= (1 - 2.2*dt);
+    if (p.t >= p.life) parts.splice(i, 1);
+  }
+}
+function drawParts() {
+  ctx.globalCompositeOperation = 'lighter';
+  for (const p of parts) {
+    const f = 1 - p.t / p.life;
+    ctx.globalAlpha = f;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * f, 0, TAU); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// ---------- background stars ----------
+const bgStars = [];
+for (let i = 0; i < 70; i++) bgStars.push({
+  x: rnd()*VW, y: rnd()*VH, d: 0.3 + rnd()*0.7, ph: rnd()*TAU });
+
+// ---------- game state ----------
+const ST = { SPLASH:0, MENU:1, SELECT:2, PLAY:3, COMPLETE:4 };
+let state = ST.SPLASH, stateT = 0;
+let fade = 1, fadeTo = null;               // screen transition
+let lvIndex = 0, lv = null;
+let ball = { x:0, y:0, tx:0, ty:0, r:16, alive:true, trail:[] };
+let dragging = false, dragOX = 0, dragOY = 0, pointer = { x:0, y:0, down:false };
+let runT = 0, deaths = 0, started = false, keysLeft = 0, timeLeft = 0;
+let shakeT = 0, shakeAmp = 0, flashT = 0, slowmo = 1, zoom = 1, zoomX = 0, zoomY = 0;
+let winT = -1, deadT = -1, msgT = 0;
+let stars = 0, starAnimT = 0;
+let paused = false;
+let buttons = [];   // rebuilt every frame: {x,y,w,h,label,cb,style}
+
+function switchState(s) { fadeTo = s; }
+function applyState(s) {
+  state = s; stateT = 0; buttons = [];
+  if (s === ST.PLAY) resetLevel(true);
+}
+
+// ---------- level lifecycle ----------
+function loadLevel(i) {
+  lvIndex = i;
+  theme = themeFor(i + 1);
+  // Deep-ish copy so per-run mutation (keys, rotation, chaser) resets cleanly.
+  const src = LEVELS[i];
+  lv = {
+    par: src.par, tl: src.tl || 0, msg: src.msg || '',
+    s: { ...src.s }, g: { ...src.g },
+    els: src.els.map(e => ({ ...e, gaps: e.gaps ? e.gaps.map(g => ({ ...g })) : undefined })),
+    keys: (src.keys || []).map(k => ({ ...k })),
+    tps: (src.tps || []).map(t => ({ ...t })),
+    chaser: src.chaser ? { ...src.chaser } : null,
+  };
+  runT = 0; deaths = 0;
+  switchState(ST.PLAY);
+}
+function resetLevel(full) {
+  ball.x = ball.tx = lv.s.x; ball.y = ball.ty = lv.s.y;
+  ball.alive = true; ball.trail.length = 0;
+  dragging = false; started = false;
+  keysLeft = lv.keys.length;
+  for (const k of lv.keys) k.got = false;
+  timeLeft = lv.tl;
+  if (lv.chaser) { lv.chaser.hx = lv.chaser.x; lv.chaser.hy = lv.chaser.y; }
+  for (const t of lv.tps) t.cd = 0;
+  winT = -1; deadT = -1; slowmo = 1; zoom = 1;
+  msgT = full ? 2.6 : 0;
+  paused = false;
+}
+
+function completeLevel() {
+  winT = 0; started = false; dragging = false;
+  AudioSys.win();
+  burst(lv.g.x, lv.g.y, theme.good, 40, 420, 1.1);
+  burst(lv.g.x, lv.g.y, theme.wall, 30, 260, 1.3);
+  zoomX = lv.g.x; zoomY = lv.g.y;
+  // stars: 3 = flawless & fast, 2 = decent, 1 = finished
+  stars = (deaths === 0 && runT <= lv.par) ? 3
+        : (deaths <= 2 && runT <= lv.par * 2.5) ? 2 : 1;
+  const p = progress[lvIndex];
+  p.stars = Math.max(p.stars, stars);
+  p.best = p.best ? Math.min(p.best, runT) : runT;
+  if (lvIndex + 1 < LEVELS.length) progress[lvIndex + 1].unlocked = true;
+}
+
+function die() {
+  if (!ball.alive) return;
+  ball.alive = false; deadT = 0; deaths++;
+  dragging = false; started = false;
+  shakeT = 0.4; shakeAmp = 16; flashT = 0.12;
+  AudioSys.death();
+  burst(ball.x, ball.y, theme.hot, 26, 460, 0.9);
+  burst(ball.x, ball.y, '#ffffff', 14, 300, 0.7);
+}
+
+// ---------- per-frame simulation ----------
+function stepPlay(rdt) {
+  const dt = rdt * slowmo;
+
+  // win / death sequencing (real-time so slow-mo feels right)
+  if (winT >= 0) {
+    winT += rdt;
+    slowmo = lerp(slowmo, 0.22, 1 - Math.exp(-rdt * 6));
+    zoom = lerp(zoom, 1.55, 1 - Math.exp(-rdt * 5));
+    if (winT > 1.0) { starAnimT = 0; switchState(ST.COMPLETE); }
+  }
+  if (deadT >= 0) {
+    deadT += rdt;
+    if (deadT > 0.55) resetLevel(false);       // instant retry
+  }
+
+  if (paused) return;
+  if (winT >= 0) { stepEntities(dt); return; }
+
+  if (started && ball.alive) {
+    runT += dt;
+    if (lv.tl) {
+      const before = Math.ceil(timeLeft);
+      timeLeft -= dt;
+      if (Math.ceil(timeLeft) !== before && timeLeft > 0 && timeLeft < 6) AudioSys.tick();
+      if (timeLeft <= 0) { die(); return; }
+    }
+  }
+
+  // orb follows the finger with easing (never teleports)
+  if (dragging && ball.alive) {
+    ball.tx = clamp(pointer.x + dragOX, ball.r, VW - ball.r);
+    ball.ty = clamp(pointer.y + dragOY, ball.r, VH - ball.r);
+  }
+  // gravity wells bend the target point — steering gets heavy near them
+  if (ball.alive) {
+    for (const e of lv.els) if (e.k === 'well') {
+      const d = dist(ball.x, ball.y, e.x, e.y);
+      if (d < e.range && d > 1) {
+        const f = e.pull * (1 - d / e.range);
+        ball.tx += (e.x - ball.x) / d * f * dt;
+        ball.ty += (e.y - ball.y) / d * f * dt;
+      }
+    }
+    const ease = 1 - Math.exp(-dt * 13);
+    ball.x += (ball.tx - ball.x) * ease;
+    ball.y += (ball.ty - ball.y) * ease;
+    ball.trail.unshift({ x: ball.x, y: ball.y });
+    if (ball.trail.length > 22) ball.trail.pop();
+  }
+
+  stepEntities(dt);
+
+  if (!ball.alive) return;
+
+  // teleporters
+  for (const t of lv.tps) {
+    t.cd = Math.max(0, t.cd - dt);
+    if (t.cd > 0) continue;
+    for (const [ax, ay, bx, by] of [[t.x1, t.y1, t.x2, t.y2], [t.x2, t.y2, t.x1, t.y1]]) {
+      if (dist(ball.x, ball.y, ax, ay) < t.r) {
+        burst(ball.x, ball.y, theme.wall, 16, 300, 0.6);
+        ball.x = ball.tx = bx; ball.y = ball.ty = by;
+        if (dragging) { dragOX = bx - pointer.x; dragOY = by - pointer.y; }
+        ball.trail.length = 0;
+        burst(bx, by, theme.wall, 16, 300, 0.6);
+        AudioSys.tele();
+        t.cd = 1.2;
+        break;
+      }
+    }
+  }
+
+  // keys
+  for (const k of lv.keys) {
+    if (!k.got && dist(ball.x, ball.y, k.x, k.y) < k.r + ball.r) {
+      k.got = true; keysLeft--;
+      AudioSys.key();
+      burst(k.x, k.y, theme.warm, 18, 320, 0.8);
+    }
+  }
+
+  // goal
+  if (keysLeft === 0 && dist(ball.x, ball.y, lv.g.x, lv.g.y) < lv.g.r * 0.85) {
+    completeLevel(); return;
+  }
+
+  // collisions (only while the run is live)
+  if (!started) return;
+  const br = ball.r * 0.82;                       // slight forgiveness
+  for (const e of lv.els) {
+    if (e.k === 'ring') {
+      const d = dist(ball.x, ball.y, e.x, e.y);
+      if (Math.abs(d - e.r) < e.th / 2 + br) {
+        const a = Math.atan2(ball.y - e.y, ball.x - e.x);
+        const angHalf = br / Math.max(d, 1);
+        let safe = false;
+        for (const g of e.gaps) {
+          if (angDist(a, g.a + e.rot) < g.w / 2 - angHalf) { safe = true; break; }
+        }
+        if (!safe) { die(); return; }
+      }
+    } else if (e.k === 'pulse') {
+      const r = e.base + e.amp * Math.sin(e.ph);
+      if (dist(ball.x, ball.y, e.x, e.y) < r + br) { die(); return; }
+    } else if (e.k === 'orb') {
+      for (let i = 0; i < e.n; i++) {
+        const a = e.ph + i * TAU / e.n;
+        const ox = e.x + Math.cos(a) * e.R, oy = e.y + Math.sin(a) * e.R;
+        if (dist(ball.x, ball.y, ox, oy) < e.r + br) { die(); return; }
+      }
+    } else if (e.k === 'well') {
+      if (dist(ball.x, ball.y, e.x, e.y) < e.core + br) { die(); return; }
+    }
+  }
+  if (lv.chaser && dist(ball.x, ball.y, lv.chaser.hx, lv.chaser.hy) < lv.chaser.r + br) {
+    die(); return;
+  }
+}
+
+function stepEntities(dt) {
+  for (const e of lv.els) {
+    if (e.k === 'ring') e.rot += e.speed * dt;
+    else if (e.k === 'pulse') e.ph += e.speed * dt;
+    else if (e.k === 'orb') e.ph += e.speed * dt;
+  }
+  if (lv.chaser && started && ball.alive && winT < 0) {
+    const c = lv.chaser;
+    const d = dist(c.hx, c.hy, ball.x, ball.y);
+    if (d > 1) {
+      c.hx += (ball.x - c.hx) / d * c.speed * dt;
+      c.hy += (ball.y - c.hy) / d * c.speed * dt;
+    }
+  }
+}
+
+// ---------- drawing ----------
+function glowCircle(x, y, r, color, alpha=1) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, color);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawBG(t) {
+  ctx.fillStyle = theme.bg;
+  ctx.fillRect(-80, -80, VW + 160, VH + 160);
+  const g = ctx.createRadialGradient(VW/2, VH*0.42, 60, VW/2, VH*0.42, VH*0.72);
+  g.addColorStop(0, theme.bg2); g.addColorStop(1, theme.bg);
+  ctx.fillStyle = g; ctx.fillRect(-80, -80, VW + 160, VH + 160);
+  for (const s of bgStars) {
+    const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * (0.4 + s.d) + s.ph));
+    ctx.globalAlpha = 0.25 * s.d * tw;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(s.x, s.y, 2.2 * s.d, 2.2 * s.d);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function strokeRingWithGaps(e, alpha) {
+  const segs = [];
+  const gaps = e.gaps.map(g => ({ a: angNorm(g.a + e.rot), w: g.w }))
+                     .sort((p, q) => p.a - q.a);
+  if (gaps.length === 0 || gaps[0].w >= TAU - 0.01) return;
+  for (let i = 0; i < gaps.length; i++) {
+    const from = gaps[i].a + gaps[i].w / 2;
+    const next = gaps[(i + 1) % gaps.length];
+    const to = next.a - next.w / 2 + (i === gaps.length - 1 ? TAU : 0);
+    if (to > from) segs.push([from, to]);
+  }
+  ctx.lineCap = 'round';
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.28 * alpha;
+  ctx.strokeStyle = e.color; ctx.lineWidth = e.th * 2.1;
+  for (const [a, b] of segs) { ctx.beginPath(); ctx.arc(e.x, e.y, e.r, a, b); ctx.stroke(); }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = e.color; ctx.lineWidth = e.th;
+  for (const [a, b] of segs) { ctx.beginPath(); ctx.arc(e.x, e.y, e.r, a, b); ctx.stroke(); }
+  ctx.globalAlpha = alpha * 0.9;
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = e.th * 0.22;
+  for (const [a, b] of segs) { ctx.beginPath(); ctx.arc(e.x, e.y, e.r, a, b); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+}
+
+function drawPlay(t) {
+  // wells (under everything)
+  for (const e of lv.els) if (e.k === 'well') {
+    glowCircle(e.x, e.y, e.range, theme.hot, 0.10);
+    ctx.strokeStyle = theme.hot; ctx.globalAlpha = 0.3; ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const rr = e.core + ((t * 60 + i * (e.range - e.core) / 3) % (e.range - e.core));
+      ctx.globalAlpha = 0.35 * (1 - (rr - e.core) / (e.range - e.core));
+      ctx.beginPath(); ctx.arc(e.x, e.y, rr, 0, TAU); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    glowCircle(e.x, e.y, e.core * 2.2, theme.hot, 0.8);
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.core * 0.6, 0, TAU); ctx.fill();
+  }
+
+  // teleporters
+  for (const tp of lv.tps) {
+    for (const [x, y] of [[tp.x1, tp.y1], [tp.x2, tp.y2]]) {
+      const pulse = 1 + 0.1 * Math.sin(t * 4);
+      glowCircle(x, y, tp.r * 2 * pulse, theme.wall, 0.35);
+      ctx.strokeStyle = theme.wall; ctx.lineWidth = 3;
+      ctx.setLineDash([10, 8]); ctx.lineDashOffset = -t * 40;
+      ctx.beginPath(); ctx.arc(x, y, tp.r, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // goal portal
+  const open = keysLeft === 0;
+  const gp = 1 + 0.12 * Math.sin(t * 3.2);
+  glowCircle(lv.g.x, lv.g.y, lv.g.r * 2.6 * gp, theme.good, open ? 0.75 : 0.2);
+  ctx.strokeStyle = theme.good; ctx.lineWidth = 5;
+  ctx.globalAlpha = open ? 1 : 0.35;
+  ctx.beginPath(); ctx.arc(lv.g.x, lv.g.y, lv.g.r * gp, 0, TAU); ctx.stroke();
+  ctx.globalAlpha = open ? 0.85 : 0.2;
+  ctx.beginPath(); ctx.arc(lv.g.x, lv.g.y, lv.g.r * 0.55, t * 1.5, t * 1.5 + 4.6); ctx.stroke();
+  ctx.globalAlpha = 1;
+  if (!open) { // lock indicator
+    ctx.strokeStyle = theme.dim; ctx.lineWidth = 3;
+    ctx.strokeRect(lv.g.x - 12, lv.g.y - 8, 24, 20);
+    ctx.beginPath(); ctx.arc(lv.g.x, lv.g.y - 8, 8, Math.PI, 0); ctx.stroke();
+  }
+
+  // keys
+  for (const k of lv.keys) if (!k.got) {
+    const bob = Math.sin(t * 3 + k.x) * 4;
+    glowCircle(k.x, k.y + bob, k.r * 2.4, theme.warm, 0.6);
+    ctx.fillStyle = theme.warm;
+    ctx.beginPath(); ctx.arc(k.x, k.y + bob, k.r * 0.55, 0, TAU); ctx.fill();
+    ctx.strokeStyle = theme.warm; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(k.x, k.y + bob, k.r, 0, TAU); ctx.stroke();
+  }
+
+  // hazards
+  for (const e of lv.els) {
+    if (e.k === 'ring') {
+      let alpha = 1;
+      if (e.ghost) {
+        const d = Math.abs(dist(ball.x, ball.y, e.x, e.y) - e.r);
+        alpha = clamp(1 - (d - 90) / 160, 0.06, 1);
+      }
+      e.color = e.speed === 0 ? theme.wall : theme.hot;
+      strokeRingWithGaps(e, alpha);
+    } else if (e.k === 'pulse') {
+      const r = e.base + e.amp * Math.sin(e.ph);
+      glowCircle(e.x, e.y, r * 1.9, theme.warm, 0.5);
+      ctx.fillStyle = theme.warm;
+      ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath(); ctx.arc(e.x - r*0.25, e.y - r*0.25, r*0.25, 0, TAU); ctx.fill();
+    } else if (e.k === 'orb') {
+      ctx.strokeStyle = theme.dim; ctx.globalAlpha = 0.22; ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 10]);
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.R, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      for (let i = 0; i < e.n; i++) {
+        const a = e.ph + i * TAU / e.n;
+        const ox = e.x + Math.cos(a) * e.R, oy = e.y + Math.sin(a) * e.R;
+        glowCircle(ox, oy, e.r * 2.4, theme.hot, 0.6);
+        ctx.fillStyle = theme.hot;
+        ctx.beginPath(); ctx.arc(ox, oy, e.r, 0, TAU); ctx.fill();
+      }
+    }
+  }
+
+  // chaser
+  if (lv.chaser) {
+    const c = lv.chaser;
+    glowCircle(c.hx, c.hy, c.r * 3, '#ff3333', 0.7);
+    ctx.fillStyle = '#ff4444';
+    const spikes = 8;
+    ctx.beginPath();
+    for (let i = 0; i <= spikes * 2; i++) {
+      const a = i * Math.PI / spikes + t * 3;
+      const rr = i % 2 ? c.r : c.r * 1.5;
+      const px = c.hx + Math.cos(a) * rr, py = c.hy + Math.sin(a) * rr;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+
+  // ball trail + ball
+  if (ball.alive) {
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < ball.trail.length; i++) {
+      const p = ball.trail[i], f = 1 - i / ball.trail.length;
+      ctx.globalAlpha = 0.16 * f;
+      ctx.fillStyle = theme.wall;
+      ctx.beginPath(); ctx.arc(p.x, p.y, ball.r * f, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    glowCircle(ball.x, ball.y, ball.r * 3.2, theme.wall, 0.9);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, TAU); ctx.fill();
+    ctx.fillStyle = theme.wall;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r * 0.62, 0, TAU); ctx.fill();
+  }
+
+  drawParts();
+}
+
+// ---------- UI helpers ----------
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function button(x, y, w, h, label, cb, style = {}) {
+  buttons.push({ x, y, w, h, cb });
+  const grad = ctx.createLinearGradient(x, y, x + w, y);
+  grad.addColorStop(0, style.c1 || theme.wall);
+  grad.addColorStop(1, style.c2 || theme.hot);
+  ctx.save();
+  if (!style.flat) { ctx.shadowColor = style.c1 || theme.wall; ctx.shadowBlur = 22; }
+  ctx.fillStyle = style.flat ? 'rgba(255,255,255,0.07)' : grad;
+  roundRect(x, y, w, h, h / 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = style.flat ? theme.dim : '#fff';
+  ctx.font = `800 ${style.fs || 30}px system-ui,sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, x + w / 2, y + h / 2 + 2);
+  ctx.textBaseline = 'alphabetic';
+}
+function drawStar(x, y, r, fill, alpha=1) {
+  ctx.save(); ctx.translate(x, y); ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI/2 + i * Math.PI / 5;
+    const rr = i % 2 ? r * 0.45 : r;
+    i === 0 ? ctx.moveTo(Math.cos(a)*rr, Math.sin(a)*rr)
+            : ctx.lineTo(Math.cos(a)*rr, Math.sin(a)*rr);
+  }
+  ctx.closePath();
+  if (fill) {
+    ctx.shadowColor = theme.warm; ctx.shadowBlur = 18;
+    ctx.fillStyle = theme.warm; ctx.fill();
+  } else {
+    ctx.strokeStyle = theme.dim; ctx.lineWidth = 3; ctx.stroke();
+  }
+  ctx.restore(); ctx.globalAlpha = 1;
+}
+function title(txt, y, size, color) {
+  ctx.save();
+  ctx.shadowColor = color; ctx.shadowBlur = 30;
+  ctx.fillStyle = color;
+  ctx.font = `900 ${size}px system-ui,sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText(txt, VW/2, y);
+  ctx.restore();
+}
+
+// ---------- screens ----------
+function drawSplash(t) {
+  drawBG(t);
+  const a = clamp(t / 0.8, 0, 1);
+  ctx.globalAlpha = a;
+  const pulse = 1 + 0.06 * Math.sin(t * 3);
+  ctx.save();
+  ctx.translate(VW/2, VH*0.42); ctx.scale(pulse, pulse);
+  ctx.strokeStyle = theme.wall; ctx.lineWidth = 8;
+  ctx.shadowColor = theme.wall; ctx.shadowBlur = 30;
+  ctx.beginPath(); ctx.arc(0, 0, 90, 0.5, 5.6); ctx.stroke();
+  ctx.fillStyle = theme.hot; ctx.shadowColor = theme.hot;
+  ctx.beginPath(); ctx.arc(62, -62, 18, 0, TAU); ctx.fill();
+  ctx.restore();
+  title('ORBIT MAZE', VH*0.42 + 190, 84, theme.text);
+  ctx.globalAlpha = a * (0.5 + 0.5*Math.sin(t*4));
+  ctx.fillStyle = theme.dim; ctx.font = '600 26px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('tap to begin', VW/2, VH*0.72);
+  ctx.globalAlpha = 1;
+  if (t > 2.4) switchState(ST.MENU);
+}
+
+function drawMenu(t) {
+  drawBG(t);
+  // decorative orbiting ring behind the title
+  ctx.globalAlpha = 0.5;
+  strokeRingWithGaps({ x: VW/2, y: 430, r: 250, th: 14, rot: t*0.3,
+    gaps: [{a:0, w:1}, {a:Math.PI, w:1}], color: theme.hot });
+  strokeRingWithGaps({ x: VW/2, y: 430, r: 180, th: 10, rot: -t*0.42,
+    gaps: [{a:1.5, w:0.9}], color: theme.wall });
+  ctx.globalAlpha = 1;
+  title('ORBIT', 400, 110, theme.wall);
+  title('MAZE', 505, 110, theme.hot);
+  ctx.fillStyle = theme.dim; ctx.font = '600 24px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText('drag the orb through the neon maze', VW/2, 590);
+
+  drawStar(VW/2 - 60, 700, 20, true);
+  ctx.fillStyle = theme.text; ctx.font = '800 34px system-ui';
+  ctx.fillText(`${totalStars()} / ${LEVELS.length * 3}`, VW/2 + 40, 712);
+
+  button(VW/2 - 180, 850, 360, 96, 'PLAY', () => switchState(ST.SELECT));
+  button(VW/2 - 180, 990, 360, 76,
+    AudioSys.muted ? 'SOUND: OFF' : 'SOUND: ON',
+    () => AudioSys.setMuted(!AudioSys.muted), { flat: true, fs: 24 });
+  ctx.fillStyle = theme.dim; ctx.font = '500 20px system-ui';
+  ctx.fillText('one finger • 30 levels • 3 chapters', VW/2, 1180);
+}
+
+function drawSelect(t) {
+  drawBG(t);
+  title('SELECT LEVEL', 170, 56, theme.text);
+  drawStar(VW/2 - 55, 235, 16, true);
+  ctx.fillStyle = theme.dim; ctx.font = '700 26px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText(`${totalStars()} / ${LEVELS.length * 3}`, VW/2 + 35, 245);
+
+  const cols = 5, cw = 156, ch = 168, gx = (VW - cols * cw) / 2;
+  for (let i = 0; i < LEVELS.length; i++) {
+    const cx = gx + (i % cols) * cw + cw/2;
+    const cy = 330 + Math.floor(i / cols) * ch + ch/2;
+    const p = progress[i];
+    const th = themeFor(i + 1);
+    if (p.unlocked) {
+      buttons.push({ x: cx-64, y: cy-70, w: 128, h: 140, cb: () => { AudioSys.click(); loadLevel(i); } });
+      ctx.save();
+      ctx.shadowColor = th.wall; ctx.shadowBlur = p.stars ? 16 : 8;
+      ctx.strokeStyle = th.wall; ctx.lineWidth = 3.5;
+      ctx.globalAlpha = p.stars ? 1 : 0.75;
+      ctx.beginPath(); ctx.arc(cx, cy - 12, 46, 0, TAU); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = theme.text; ctx.font = '800 36px system-ui'; ctx.textAlign = 'center';
+      ctx.fillText(i + 1, cx, cy);
+      for (let s = 0; s < 3; s++)
+        drawStar(cx - 26 + s * 26, cy + 52, 11, s < p.stars);
+    } else {
+      ctx.globalAlpha = 0.32;
+      ctx.strokeStyle = theme.dim; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy - 12, 46, 0, TAU); ctx.stroke();
+      ctx.fillStyle = theme.dim; ctx.font = '700 30px system-ui'; ctx.textAlign = 'center';
+      ctx.fillText('✕', cx, cy - 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+  button(VW/2 - 130, VH - 190, 260, 76, 'MENU', () => switchState(ST.MENU), { flat: true, fs: 26 });
+}
+
+function drawHUD(t) {
+  ctx.fillStyle = theme.dim; ctx.font = '700 26px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillText(`LEVEL ${lvIndex + 1}`, 40, 72);
+  ctx.textAlign = 'right';
+  ctx.fillText(started || runT > 0 ? runT.toFixed(1) + 's' : '', VW - 130, 72);
+  if (deaths > 0) {
+    ctx.fillStyle = theme.hot;
+    ctx.fillText(`✕${deaths}`, VW - 130, 112);
+  }
+  if (lv.keys.length) {
+    ctx.fillStyle = theme.warm; ctx.textAlign = 'left';
+    ctx.fillText(`KEYS ${lv.keys.length - keysLeft}/${lv.keys.length}`, 40, 112);
+  }
+  if (lv.tl) { // time bar
+    const f = clamp(timeLeft / lv.tl, 0, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(200, 130, VW - 400, 12, 6); ctx.fill();
+    ctx.fillStyle = f < 0.25 ? theme.hot : theme.good;
+    roundRect(200, 130, (VW - 400) * f, 12, 6); ctx.fill();
+  }
+  // pause button
+  buttons.push({ x: VW - 104, y: 28, w: 76, h: 76, cb: () => { paused = true; AudioSys.click(); } });
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  roundRect(VW - 104, 28, 76, 76, 20); ctx.fill();
+  ctx.fillStyle = theme.dim;
+  ctx.fillRect(VW - 82, 48, 12, 36); ctx.fillRect(VW - 62, 48, 12, 36);
+
+  if (msgT > 0 && lv.msg) {
+    ctx.globalAlpha = clamp(msgT / 0.5, 0, 1);
+    ctx.fillStyle = theme.text; ctx.font = '800 30px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(lv.msg, VW/2, 210);
+    ctx.globalAlpha = 1;
+  }
+  if (!started && ball.alive && winT < 0) {
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 4);
+    ctx.fillStyle = theme.text; ctx.font = '700 28px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('touch and drag to move', VW/2, lv.s.y + 90);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawPauseOverlay() {
+  ctx.fillStyle = 'rgba(4,6,12,0.82)';
+  ctx.fillRect(-80, -80, VW + 160, VH + 160);
+  title('PAUSED', 560, 72, theme.text);
+  button(VW/2 - 180, 700, 360, 90, 'RESUME', () => { paused = false; AudioSys.click(); });
+  button(VW/2 - 180, 830, 360, 74, 'RESTART', () => { AudioSys.click(); resetLevel(true); }, { flat:true, fs:26 });
+  button(VW/2 - 180, 940, 360, 74, 'LEVELS', () => { AudioSys.click(); switchState(ST.SELECT); }, { flat:true, fs:26 });
+}
+
+function drawComplete(t) {
+  drawBG(t);
+  ctx.globalAlpha = 0.35;
+  strokeRingWithGaps({ x: VW/2, y: 500, r: 300, th: 12, rot: t*0.25,
+    gaps: [{a:0, w:0.8}], color: theme.good });
+  ctx.globalAlpha = 1;
+  title('LEVEL ' + (lvIndex + 1), 380, 52, theme.dim);
+  title('COMPLETE', 470, 88, theme.good);
+
+  starAnimT += 1/60;
+  for (let s = 0; s < 3; s++) {
+    const at = clamp((starAnimT - 0.25 - s * 0.35) * 3, 0, 1);
+    if (at > 0 && at < 0.05 && s < stars) AudioSys.star(s);
+    const sc = s < stars ? easeOutBack(at) : 1;
+    if (s < stars && at > 0) {
+      ctx.save(); ctx.translate(VW/2 + (s-1)*130, 640); ctx.scale(sc, sc);
+      drawStar(0, 0, 52, true); ctx.restore();
+      if (at > 0.1 && at < 0.16) burst(VW/2 + (s-1)*130, 640, theme.warm, 10, 260, 0.7);
+    } else if (s >= stars) {
+      drawStar(VW/2 + (s-1)*130, 640, 52, false, 0.5);
+    }
+  }
+  ctx.fillStyle = theme.dim; ctx.font = '600 28px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText(`time ${runT.toFixed(1)}s   •   deaths ${deaths}`, VW/2, 780);
+  if (stars < 3) {
+    ctx.font = '500 22px system-ui';
+    ctx.fillText(`3★ = no deaths & under ${lv.par}s`, VW/2, 822);
+  }
+
+  const last = lvIndex + 1 >= LEVELS.length;
+  button(VW/2 - 180, 900, 360, 96, last ? 'THE END ★' : 'NEXT',
+    () => { AudioSys.click(); last ? switchState(ST.SELECT) : loadLevel(lvIndex + 1); });
+  button(VW/2 - 180, 1036, 360, 74, 'RETRY', () => { AudioSys.click(); loadLevel(lvIndex); }, { flat:true, fs:26 });
+  button(VW/2 - 180, 1146, 360, 74, 'LEVELS', () => { AudioSys.click(); switchState(ST.SELECT); }, { flat:true, fs:26 });
+}
+
+// ---------- input ----------
+function pointerPos(ev) {
+  const r = cv.getBoundingClientRect();
+  const src = ev.touches ? ev.touches[0] || ev.changedTouches[0] : ev;
+  return { x: toVX(src.clientX - r.left), y: toVY(src.clientY - r.top) };
+}
+function onDown(ev) {
+  ev.preventDefault();
+  AudioSys.ensure();
+  const p = pointerPos(ev);
+  pointer.x = p.x; pointer.y = p.y; pointer.down = true;
+
+  // buttons first (any state)
+  for (const b of buttons) {
+    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { b.cb(); return; }
+  }
+  if (state === ST.SPLASH) { switchState(ST.MENU); AudioSys.click(); return; }
+  if (state === ST.PLAY && !paused && ball.alive && winT < 0) {
+    dragging = true;
+    dragOX = ball.x - p.x; dragOY = ball.y - p.y;   // ball never jumps to the finger
+    if (!started) { started = true; AudioSys.grab(); }
+  }
+}
+function onMove(ev) {
+  ev.preventDefault();
+  const p = pointerPos(ev);
+  pointer.x = p.x; pointer.y = p.y;
+}
+function onUp(ev) {
+  ev.preventDefault();
+  pointer.down = false; dragging = false;
+}
+if (window.PointerEvent) {
+  cv.addEventListener('pointerdown', onDown, { passive:false });
+  cv.addEventListener('pointermove', onMove, { passive:false });
+  cv.addEventListener('pointerup', onUp, { passive:false });
+  cv.addEventListener('pointercancel', onUp, { passive:false });
+} else {
+  cv.addEventListener('touchstart', onDown, { passive:false });
+  cv.addEventListener('touchmove', onMove, { passive:false });
+  cv.addEventListener('touchend', onUp, { passive:false });
+  cv.addEventListener('mousedown', onDown);
+  cv.addEventListener('mousemove', onMove);
+  cv.addEventListener('mouseup', onUp);
+}
+
+// ---------- main loop ----------
+let lastT = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  let rdt = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now;
+  stateT += rdt;
+
+  buttons = [];
+
+  // state transition fade
+  if (fadeTo !== null) {
+    fade = Math.min(fade + rdt * 4, 1);
+    if (fade >= 1) { applyState(fadeTo); fadeTo = null; }
+  } else if (fade > 0) fade = Math.max(fade - rdt * 3, 0);
+
+  if (state === ST.PLAY && fadeTo === null) stepPlay(rdt);
+  stepParts(rdt);
+  if (shakeT > 0) shakeT -= rdt;
+  if (flashT > 0) flashT -= rdt;
+  if (msgT > 0) msgT -= rdt;
+
+  // ---- render ----
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = theme.bg; ctx.fillRect(0, 0, scrW, scrH);
+  ctx.setTransform(dpr * scl, 0, 0, dpr * scl, dpr * offX, dpr * offY);
+
+  const t = stateT;
+  switch (state) {
+    case ST.SPLASH:   drawSplash(t); break;
+    case ST.MENU:     drawMenu(t); break;
+    case ST.SELECT:   drawSelect(t); break;
+    case ST.COMPLETE: drawComplete(t); break;
+    case ST.PLAY:
+      // camera (zoom on win, shake on death) applies to the world only —
+      // the HUD stays fixed.
+      ctx.save();
+      if (zoom !== 1) {
+        ctx.translate(zoomX, zoomY); ctx.scale(zoom, zoom);
+        ctx.translate(-zoomX, -zoomY);
+      }
+      if (shakeT > 0) {
+        const sh = shakeAmp * (shakeT / 0.4);
+        ctx.translate((Math.random()*2-1)*sh, (Math.random()*2-1)*sh);
+      }
+      drawBG(t);
+      drawPlay(t);
+      ctx.restore();
+      drawHUD(t);
+      if (paused) drawPauseOverlay();
+      break;
+  }
+
+  // death flash
+  if (flashT > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${(flashT / 0.12) * 0.3})`;
+    ctx.fillRect(-80, -80, VW + 160, VH + 160);
+  }
+  // transition curtain
+  if (fade > 0) {
+    ctx.fillStyle = `rgba(3,5,10,${fade})`;
+    ctx.fillRect(-80, -80, VW + 160, VH + 160);
+  }
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
