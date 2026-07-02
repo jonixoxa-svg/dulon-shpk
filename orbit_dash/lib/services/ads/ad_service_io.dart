@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-import '../config/ad_config.dart';
-import 'consent_service.dart';
-import 'storage_service.dart';
+import '../../config/ad_config.dart';
+import '../consent_service.dart';
+import '../storage_service.dart';
 
 /// Owns the whole ad lifecycle: consent → SDK init → preloading →
 /// showing → reloading.
@@ -34,6 +34,14 @@ class AdService {
   bool get isReady => _initialized;
 
   bool get isRewardedReady => _rewardedAd != null;
+
+  /// Whether the menu should show a privacy-settings entry (GDPR regions).
+  bool get privacyOptionsRequired =>
+      ConsentService.instance.privacyOptionsRequired;
+
+  /// Reopens the UMP consent form so users can change their choice.
+  Future<void> showPrivacyOptions() =>
+      ConsentService.instance.showPrivacyOptions();
 
   /// Full startup: UMP consent flow, then SDK init, then preload.
   /// Call once (fire-and-forget) after the first frame. Never throws.

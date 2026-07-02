@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../config/game_config.dart';
 import '../../game/orbit_dash_game.dart';
-import '../../services/ad_service.dart';
+import '../../services/ads/ad_service.dart';
 import '../../services/storage_service.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/neon_button.dart';
@@ -216,7 +216,7 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
           const Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Text(
-              '★ NEW BEST ★',
+              '• NEW BEST •',
               style: TextStyle(
                 color: GameConfig.orbColor,
                 fontSize: 16,

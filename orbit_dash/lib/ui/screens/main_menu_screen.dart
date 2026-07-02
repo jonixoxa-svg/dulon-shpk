@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../config/game_config.dart';
-import '../../services/ad_service.dart';
+import '../../services/ads/ad_service.dart';
 import '../../services/audio_service.dart';
-import '../../services/consent_service.dart';
 import '../../services/storage_service.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/neon_button.dart';
@@ -123,12 +122,11 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                           () => setState(() =>
                               AudioService.instance.soundOn = !soundOn),
                         ),
-                        if (ConsentService
-                            .instance.privacyOptionsRequired) ...[
+                        if (AdService.instance.privacyOptionsRequired) ...[
                           const SizedBox(width: 16),
                           _iconButton(
                             Icons.privacy_tip_outlined,
-                            ConsentService.instance.showPrivacyOptions,
+                            AdService.instance.showPrivacyOptions,
                           ),
                         ],
                       ],

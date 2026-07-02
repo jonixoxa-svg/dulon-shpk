@@ -41,6 +41,7 @@ class OrbitDashApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
+        fontFamily: 'Roboto',
         scaffoldBackgroundColor: GameConfig.background,
         colorScheme: ColorScheme.fromSeed(
           seedColor: GameConfig.ballColor,

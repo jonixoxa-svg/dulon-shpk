@@ -29,3 +29,15 @@ flutter:
 
   assets:
     - assets/audio/
+
+  # Roboto is bundled so text renders identically everywhere (the web build
+  # would otherwise download it from a CDN at runtime). Copied from the
+  # Flutter SDK (Apache 2.0).
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Roboto-Black.ttf
+          weight: 900

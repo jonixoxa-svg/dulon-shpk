@@ -352,6 +352,29 @@ storage directly except through the small **services** layer, and **UI**
 
 ---
 
+## Bonus: browser-playable demo (docs/)
+
+The repository's `docs/` folder (at the repo root, next to this project)
+contains a pre-built **web demo** of the game for quick playtesting on any
+device — including iPhones. It's gameplay-only: AdMob has no web SDK, so
+on web the ads layer compiles to a no-op stub
+(`lib/services/ads/ad_service_web.dart`) and the game simply runs ad-free.
+
+To host it with GitHub Pages: repo **Settings → Pages → Deploy from a
+branch**, pick this branch and the `/docs` folder, save, wait a minute,
+then open `https://<user>.github.io/<repo>/`.
+
+To regenerate it after changing the game:
+
+```bash
+flutter build web --release --base-href "/<repo-name>/" --no-web-resources-cdn
+rm -rf ../docs && cp -r build/web ../docs && touch ../docs/.nojekyll
+```
+
+The demo is a convenience only — the product you ship is the Android app.
+
+---
+
 ## 10. How the ads behave
 
 Implemented to be both **policy-safe** and **retention-friendly**:
