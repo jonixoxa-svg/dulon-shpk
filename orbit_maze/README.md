@@ -24,6 +24,31 @@ enabled for this repo) at `https://<user>.github.io/<repo>/maze/`.
 Stars: 3★ = no deaths and under par time · 2★ = ≤2 deaths and under
 2.5× par · 1★ = finish.
 
+## Engagement & retention systems
+
+- **Trails** (7, unlocked by total stars): Comet, Fire, Electric, Rainbow,
+  Stardust, Shadow, and Golden (requires 3-starring all 30 levels).
+- **Skins** (6): Neon, Planet, Eyeball (looks at the goal), Heart, Disco,
+  Black Hole — unlocked at 0/5/15/30/45/75 stars.
+- **Locker screen** with live animated preview; the menu's demo orb also
+  wears your equipped cosmetics.
+- **Flow meter**: threading ring gaps fills it; at full flow the trail
+  doubles and the screen edges glow. Full flow is sticky until death;
+  finishing at full flow earns a sparkle banner.
+- **Near-miss sparks** + whoosh for shaving past hazards (counted in stats).
+- **Daily challenge**: date-seeded procedural level with crown + streak
+  counter (session-only; see code comment for the TWA persistence hook).
+- **Chapter celebrations** after levels 10/20 with animated palette reveal.
+- **Stats screen**: deaths, near-misses, gaps threaded, fastest level,
+  favorite trail, daily streak.
+- Ambient life: 3-layer parallax starfield reacting to the orb, shooting
+  stars, portal vortex with glyph ring, breathing ring glow, hazard
+  warning particles, floating title letters.
+- **Adaptive quality**: all particles pooled (hard cap); if frames exceed
+  20 ms for 30 consecutive frames, particle budgets step down
+  automatically and recover when performance allows.
+- Dev/testing hook: open with `#dev` in the URL to unlock everything.
+
 ## Tech notes
 
 - Canvas 2D, `requestAnimationFrame` with delta-time; virtual 1000×1600
