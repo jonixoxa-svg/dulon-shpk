@@ -24,6 +24,35 @@ enabled for this repo) at `https://<user>.github.io/<repo>/maze/`.
 Stars: 3★ = no deaths and under par time · 2★ = ≤2 deaths and under
 2.5× par · 1★ = finish.
 
+## Ascent Mode (endless vertical climb)
+
+Second game mode on the main menu: drag the orb upward through an endless
+procedural maze. Altitude is the score (with a session-best ghost line).
+
+- **Zones** with distinct palettes, mechanics and ambience, crossfading at
+  each boundary with an "ENTERING:" banner and musical sting:
+  Neon City (0–200m, classic hazards + city glow) → Storm Layer (200–500m,
+  wind gusts with streak warnings, rain, lightning that reveals invisible
+  walls) → Stratosphere (500–900m, drifty controls, faster rings, auroras)
+  → Orbit (900–1400m, gravity wells, floating debris, Earth below) →
+  Deep Space (1400m+, black holes, comets, trail-revealed ghost walls).
+- **Checkpoints** at growing intervals (100/250/450/700m…), 3 lives each
+  shown as orbs; dying respawns at the last checkpoint, exhausting one
+  falls you back to the previous.
+- **Fair procedural generation**: screen-height chunks assembled from
+  hand-designed per-zone patterns, every pattern keeps a passable route,
+  hazards never spawn inside a checkpoint's protected band; difficulty
+  rises in waves with calm shard-rich stretches between intense ones.
+- **Star shards** along the route (riskier = more) feed the same Locker
+  unlock currency (10 shards = 1 star); altitude milestones at
+  500/1000/2000m grant one-time bonuses.
+- **Run summary** with altitude, shards, best, and a vertical mini-map of
+  the zones you climbed through.
+- Camera: eased follow with velocity look-ahead and speed-based zoom;
+  only entities within ~1.5 screens are simulated (60 FPS held at 2000m+).
+- Dev keys with `#fly` in the URL: J = jump to next checkpoint,
+  U = +400m, K = force death (for testing checkpoints).
+
 ## Engagement & retention systems
 
 - **Trails** (7, unlocked by total stars): Comet, Fire, Electric, Rainbow,
