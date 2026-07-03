@@ -11,7 +11,9 @@ import '../widgets/banner_ad_widget.dart';
 import '../widgets/neon_button.dart';
 import 'game_screen.dart';
 import 'meta_screens.dart';
+import 'settings_screen.dart';
 import 'store_screen.dart';
+import '../widgets/motion.dart';
 
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
@@ -149,6 +151,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                               () => setState(() =>
                                   AudioService.instance.soundOn = !soundOn),
                             ),
+                            const SizedBox(width: 16),
+                            _iconButton(Icons.settings,
+                                () => _push(const SettingsScreen())),
                             if (AdService
                                 .instance.privacyOptionsRequired) ...[
                               const SizedBox(width: 16),
@@ -175,7 +180,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
 
   Future<void> _push(Widget screen) async {
     AudioService.instance.playButton();
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    await Navigator.of(context).push(slideFadeRoute(screen));
     if (mounted) setState(() {});
   }
 

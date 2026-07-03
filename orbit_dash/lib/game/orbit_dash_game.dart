@@ -4,10 +4,10 @@ import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame/particles.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../config/game_config.dart';
 import '../services/audio_service.dart';
+import '../services/haptics_service.dart';
 import '../services/meta_service.dart';
 import '../services/progression_service.dart';
 import '../services/storage_service.dart';
@@ -153,7 +153,7 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
       case GameState.playing:
         ball.reverse();
         AudioService.instance.playTap();
-        _haptic(HapticFeedback.selectionClick);
+        HapticsService.instance.light();
       case GameState.paused:
       case GameState.dying:
       case GameState.gameOver:
@@ -302,7 +302,7 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
     _shake(GameConfig.screenShakeIntensity);
     _flashTime = 0.15;
     AudioService.instance.playDeath();
-    _haptic(HapticFeedback.heavyImpact);
+    HapticsService.instance.heavy();
     _spawnBurst(ball.position, skinColorA: true, count: 36, big: true);
     ball.visible = false;
     overlays.remove(GameOverlays.hud);
@@ -325,7 +325,7 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
     _shake(GameConfig.screenShakeIntensity * 0.6);
     _flashTime = 0.10;
     AudioService.instance.playShieldBreak();
-    _haptic(HapticFeedback.mediumImpact);
+    HapticsService.instance.medium();
     spawnPopup('SHIELD DOWN', ball.position, GameConfig.shieldColor);
 
     // The hazard that hit us is destroyed so the save feels earned.
@@ -637,7 +637,7 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
         _scoreF += points;
         AudioService.instance.playNearMiss();
         MetaService.instance.onNearMiss();
-        _haptic(HapticFeedback.lightImpact);
+        HapticsService.instance.light();
         spawnPopup('NEAR MISS +$points',
             ball.position - Vector2(0, ball.radius * 3), GameConfig.textSecondary,
             fontSize: 13);
@@ -668,7 +668,7 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
   void applyPowerUp(PowerUpType type, Vector2 at) {
     MetaService.instance.onPowerUp();
     AudioService.instance.playPowerUp();
-    _haptic(HapticFeedback.mediumImpact);
+    HapticsService.instance.medium();
     spawnPopup(type.label, at - Vector2(0, 30), type.color);
     _spawnBurst(at, color: type.color, count: 14);
 
@@ -761,14 +761,6 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
         },
       ),
     ));
-  }
-
-  void _haptic(Future<void> Function() fn) {
-    try {
-      fn();
-    } catch (_) {
-      // Haptics are best-effort (no-op on web / unsupported devices).
-    }
   }
 }
 

@@ -71,8 +71,11 @@ class AudioService {
 
   void _play(String file, {double volume = 1.0}) {
     if (!soundOn) return;
+    // Scale each effect by the user's master effects volume.
+    final master = StorageService.instance.volume;
+    if (master <= 0) return;
     try {
-      FlameAudio.play(file, volume: volume);
+      FlameAudio.play(file, volume: volume * master);
     } catch (_) {
       // Never let audio break gameplay.
     }
