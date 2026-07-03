@@ -127,20 +127,38 @@ class GameConfig {
 
   /// Unlockable ball skins: name, core color, glow color, unlock level.
   static const List<BallSkin> skins = [
+    // Classics — earnable by level.
     BallSkin('CYAN', Color(0xFF00E5FF), Color(0xFF00B8D4), 1),
     BallSkin('EMBER', Color(0xFFFF9E40), Color(0xFFFF3D00), 2),
     BallSkin('VENOM', Color(0xFF76FF03), Color(0xFF1FA512), 3),
     BallSkin('NOVA', Color(0xFFFFF176), Color(0xFFFFB300), 5),
     BallSkin('GHOST', Color(0xFFE0F7FF), Color(0xFF80DEEA), 7),
     BallSkin('VOID', Color(0xFFB388FF), Color(0xFF6200EA), 10),
+    // Premium — direct purchase, fixed price, cosmetic only.
+    BallSkin('GALAXY', Color(0xFF9C6BFF), Color(0xFF5E2BFF), 1,
+        product: 'skin_galaxy'),
+    BallSkin('SUPERNOVA', Color(0xFFFFB74D), Color(0xFFFF3D00), 1,
+        product: 'skin_supernova'),
+    BallSkin('ICE COMET', Color(0xFFB3F0FF), Color(0xFF40C4FF), 1,
+        product: 'skin_icecomet'),
+    BallSkin('TROPHY', Color(0xFFFFD700), Color(0xFFB8860B), 1,
+        product: 'skin_trophy'),
+    BallSkin('DIAMOND', Color(0xFFE8FDFF), Color(0xFF80DEEA), 1,
+        product: 'skin_diamond'),
+    BallSkin('MELON', Color(0xFFFF5470), Color(0xFF2E7D32), 1,
+        product: 'skin_watermelon'),
   ];
 }
 
 class BallSkin {
-  const BallSkin(this.name, this.core, this.glow, this.unlockLevel);
+  const BallSkin(this.name, this.core, this.glow, this.unlockLevel,
+      {this.product});
 
   final String name;
   final Color core;
   final Color glow;
   final int unlockLevel;
+
+  /// Non-null = premium skin unlocked by owning this IAP product.
+  final String? product;
 }

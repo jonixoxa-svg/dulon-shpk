@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/game_config.dart';
+import 'meta_service.dart';
 
 /// Persistent meta-progression: XP, player level, unlockable skins and
 /// lifetime stats. Everything stays on-device.
@@ -83,14 +84,18 @@ class ProgressionService {
 
   set selectedSkin(int index) => _prefs?.setInt(_keySkin, index);
 
-  bool isSkinUnlocked(int index) =>
-      level >= GameConfig.skins[index].unlockLevel;
+  bool isSkinUnlocked(int index) {
+    final skin = GameConfig.skins[index];
+    if (skin.product != null) {
+      return MetaService.instance.ownsProduct(skin.product!);
+    }
+    return level >= skin.unlockLevel;
+  }
 
   BallSkin get currentSkin {
     final skin = GameConfig.skins[selectedSkin];
-    // Guard against a persisted skin the player no longer qualifies for
-    // (can only happen if unlock levels are rebalanced in an update).
-    return level >= skin.unlockLevel ? skin : GameConfig.skins.first;
+    // Guard against a persisted skin the player no longer qualifies for.
+    return isSkinUnlocked(selectedSkin) ? skin : GameConfig.skins.first;
   }
 
   // ── Lifetime stats ──────────────────────────────────────────────────────

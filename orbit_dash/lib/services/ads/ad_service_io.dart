@@ -6,6 +6,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../../config/ad_config.dart';
 import '../../config/meta_config.dart';
 import '../consent_service.dart';
+import '../meta_service.dart';
 import '../storage_service.dart';
 
 /// Owns the whole ad lifecycle: consent → SDK init → preloading →
@@ -149,6 +150,7 @@ class AdService {
       {required VoidCallback onDismissed, bool suppress = false}) {
     final count = StorageService.instance.incrementGameOverCount();
     final shouldShow = !suppress &&
+        !MetaService.instance.ownsProduct('remove_ads') &&
         _interstitialsThisSession < MetaConfig.interstitialSessionCap &&
         count % MetaConfig.interstitialEveryNGameOvers == 0;
     final ad = _interstitialAd;

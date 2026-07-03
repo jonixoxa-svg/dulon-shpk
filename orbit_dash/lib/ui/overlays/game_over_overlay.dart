@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../config/game_config.dart';
 import '../../game/orbit_dash_game.dart';
 import '../../services/ads/ad_service.dart';
+import '../../services/iap/iap_service.dart';
 import '../../services/progression_service.dart';
 import '../../services/meta_service.dart';
 import '../../services/storage_service.dart';
@@ -35,15 +36,19 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
 
   OrbitDashGame get game => widget.game;
 
+  bool get _adFree => IapService.instance.removeAdsOwned;
+
   bool get _canContinue =>
       !game.continueUsed &&
       _secondsLeft > 0 &&
-      AdService.instance.isRewardedReady;
+      (_adFree || AdService.instance.isRewardedReady);
 
   @override
   void initState() {
     super.initState();
-    if (!game.continueUsed && AdService.instance.isRewardedReady) {
+    if (!game.continueUsed &&
+        (IapService.instance.removeAdsOwned ||
+            AdService.instance.isRewardedReady)) {
       _countdown = Timer.periodic(const Duration(seconds: 1), (t) {
         if (!mounted) return;
         setState(() => _secondsLeft--);
@@ -62,6 +67,12 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
 
   void _watchAdToContinue() {
     if (_busy) return;
+    if (_adFree) {
+      // Remove Ads owners get the perk free — no ad, instant continue.
+      _countdown?.cancel();
+      game.continueRun();
+      return;
+    }
     _busy = true;
     _countdown?.cancel();
     _rewardEarned = false;
@@ -194,8 +205,8 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
                           onPressed: _watchAdToContinue,
                         ),
                         const SizedBox(height: 6),
-                        const Text(
-                          'watch an ad to keep this run',
+                        Text(
+                          _adFree ? 'free for you — ad-free player' : 'watch an ad to keep this run',
                           style: TextStyle(
                             color: GameConfig.textSecondary,
                             fontSize: 12,

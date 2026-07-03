@@ -37,6 +37,7 @@ class MetaService extends ChangeNotifier {
   List<int> missionProgress = [0, 0, 0];
   List<bool> missionClaimed = [false, false, false];
   Set<String> unlockedBadges = {}; // "orbs0", "orbs1"... key+tier
+  Set<String> ownedProducts = {};  // IAP: remove_ads, skin_* (non-consumable)
 
   // ── session/run scratch ──
   final Map<String, int> _run = {};
@@ -70,6 +71,7 @@ class MetaService extends ChangeNotifier {
       missionProgress = List<int>.from(j['mProg'] as List? ?? [0, 0, 0]);
       missionClaimed = List<bool>.from(j['mClaim'] as List? ?? [false, false, false]);
       unlockedBadges = Set<String>.from(j['badges'] as List? ?? []);
+      ownedProducts = Set<String>.from(j['owned'] as List? ?? []);
       if (missionIds.length != 3) missionIds = [];
     } catch (e) {
       debugPrint('Save corrupt, using defaults: $e');
@@ -87,6 +89,7 @@ class MetaService extends ChangeNotifier {
         'mDate': missionDate, 'mIds': missionIds,
         'mProg': missionProgress, 'mClaim': missionClaimed,
         'badges': unlockedBadges.toList(),
+        'owned': ownedProducts.toList(),
       }));
     } catch (e) {
       debugPrint('Save failed: $e');
@@ -239,6 +242,12 @@ class MetaService extends ChangeNotifier {
     addCoins(c);
     _save();
     return CapsuleReward(tier, c);
+  }
+
+  // ── IAP ownership (granted by IapService after Play Billing confirms) ──
+  bool ownsProduct(String id) => ownedProducts.contains(id);
+  void grantProduct(String id) {
+    if (ownedProducts.add(id)) _save();
   }
 
   // ── stadium ──

@@ -4,12 +4,14 @@ import '../../config/game_config.dart';
 import '../../services/ads/ad_service.dart';
 import '../../services/audio_service.dart';
 import '../../services/progression_service.dart';
+import '../../services/iap/iap_service.dart';
 import '../../services/meta_service.dart';
 import '../../services/storage_service.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/neon_button.dart';
 import 'game_screen.dart';
 import 'meta_screens.dart';
+import 'store_screen.dart';
 
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
@@ -34,6 +36,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     // Kick off consent + ads AFTER the first frame so the menu appears
     // instantly; the game never waits for the network.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await IapService.instance.init();
       await AdService.instance.init();
       if (mounted) setState(() => _adsReady = AdService.instance.isReady);
     });
@@ -109,6 +112,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                           ),
                         ),
                         const SizedBox(height: 16),
+                        if (!IapService.instance.removeAdsOwned)
                         NeonButton(
                           label: 'REMOVE ADS',
                           icon: Icons.block,
@@ -117,15 +121,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                             GameConfig.backgroundAccent,
                             GameConfig.backgroundAccent,
                           ],
-                          onPressed: () {
-                            // TODO(you): hook up in-app purchase here later.
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Coming soon!'),
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                          },
+                          onPressed: () => _push(const StoreScreen()),
                         ),
                         const SizedBox(height: 14),
                         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -134,6 +130,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                           const SizedBox(width: 12),
                           _smallButton('BADGES', Icons.workspace_premium,
                               () => _push(const BadgesScreen())),
+                          const SizedBox(width: 12),
+                          _smallButton('STORE', Icons.storefront,
+                              () => _push(const StoreScreen())),
                         ]),
                         const SizedBox(height: 18),
                         ListenableBuilder(
@@ -338,8 +337,10 @@ class _MainMenuScreenState extends State<MainMenuScreen>
         if (!unlocked) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Reach level ${skin.unlockLevel} to unlock '
-                  '${skin.name}'),
+              content: Text(skin.product != null
+                  ? '${skin.name} is in the Store'
+                  : 'Reach level ${skin.unlockLevel} to unlock '
+                      '${skin.name}'),
               duration: const Duration(seconds: 1),
             ),
           );
@@ -387,7 +388,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                         size: 12,
                         color: Colors.white.withValues(alpha: 0.35)),
                     Text(
-                      'LV${skin.unlockLevel}',
+                      skin.product != null ? 'SHOP' : 'LV${skin.unlockLevel}',
                       style: TextStyle(
                         fontSize: 7,
                         color: Colors.white.withValues(alpha: 0.35),
