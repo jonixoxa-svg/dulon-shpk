@@ -4,10 +4,12 @@ import '../../config/game_config.dart';
 import '../../services/ads/ad_service.dart';
 import '../../services/audio_service.dart';
 import '../../services/progression_service.dart';
+import '../../services/meta_service.dart';
 import '../../services/storage_service.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/neon_button.dart';
 import 'game_screen.dart';
+import 'meta_screens.dart';
 
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
@@ -78,7 +80,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 20),
+                        _coinsAndSeason(),
+                        const SizedBox(height: 6),
                         _title(),
                         const SizedBox(height: 10),
                         const Text(
@@ -123,7 +127,19 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                             );
                           },
                         ),
-                        const SizedBox(height: 22),
+                        const SizedBox(height: 14),
+                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          _smallButton('MISSIONS', Icons.flag,
+                              () => _push(const MissionsScreen())),
+                          const SizedBox(width: 12),
+                          _smallButton('BADGES', Icons.workspace_premium,
+                              () => _push(const BadgesScreen())),
+                        ]),
+                        const SizedBox(height: 18),
+                        ListenableBuilder(
+                            listenable: MetaService.instance,
+                            builder: (context, child) => const StadiumView()),
+                        const SizedBox(height: 18),
                         _statsRow(),
                         const SizedBox(height: 18),
                         Row(
@@ -155,6 +171,63 @@ class _MainMenuScreenState extends State<MainMenuScreen>
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _push(Widget screen) async {
+    AudioService.instance.playButton();
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    if (mounted) setState(() {});
+  }
+
+  Widget _smallButton(String label, IconData icon, VoidCallback onTap) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 16, color: GameConfig.textSecondary),
+      label: Text(label,
+          style: const TextStyle(
+              color: GameConfig.textSecondary,
+              fontSize: 12,
+              letterSpacing: 2,
+              fontWeight: FontWeight.w700)),
+      style: OutlinedButton.styleFrom(
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+    );
+  }
+
+  Widget _coinsAndSeason() {
+    final meta = MetaService.instance;
+    return ListenableBuilder(
+      listenable: meta,
+      builder: (context, child) => Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.monetization_on, color: GameConfig.orbColor, size: 20),
+        const SizedBox(width: 6),
+        Text('${meta.coins}',
+            style: const TextStyle(
+                color: GameConfig.textPrimary, fontWeight: FontWeight.w800)),
+        if (meta.capsulesPending > 0) ...[
+          const SizedBox(width: 16),
+          const Icon(Icons.card_giftcard, color: GameConfig.coreColor, size: 20),
+          Text(' ${meta.capsulesPending}',
+              style: const TextStyle(
+                  color: GameConfig.textPrimary, fontWeight: FontWeight.w800)),
+        ],
+        if (meta.seasonName != null) ...[
+          const SizedBox(width: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: GameConfig.orbColor)),
+            child: Text(meta.seasonName!,
+                style: const TextStyle(
+                    color: GameConfig.orbColor,
+                    fontSize: 10,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ]),
     );
   }
 

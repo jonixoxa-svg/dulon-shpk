@@ -20,7 +20,8 @@ class AdService {
 
   Future<void> init() async {}
 
-  void maybeShowInterstitial({required VoidCallback onDismissed}) {
+  void maybeShowInterstitial(
+      {required VoidCallback onDismissed, bool suppress = false}) {
     onDismissed();
   }
 

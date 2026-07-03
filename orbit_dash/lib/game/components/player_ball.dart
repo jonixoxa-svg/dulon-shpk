@@ -101,8 +101,31 @@ class PlayerBall extends PositionComponent
     _corePaint.color = skin.core;
     canvas.drawCircle(Offset.zero, radius * 1.7, _glowPaint);
     canvas.drawCircle(Offset.zero, radius, _corePaint);
-    canvas.drawCircle(Offset(-radius * 0.25, -radius * 0.25), radius * 0.4,
-        Paint()..color = Colors.white.withValues(alpha: 0.85));
+    // Mascot face: football patch + big eyes that blink and look toward
+    // the core. Characters create attachment; geometry doesn't.
+    final blink = (_blinkTimer % 3.4) > 3.25;
+    final toCore = (game.center - position)..normalize();
+    final look = Offset(toCore.x, toCore.y) * radius * 0.14;
+    for (final side in [-1.0, 1.0]) {
+      final ec = Offset(side * radius * 0.38, -radius * 0.15);
+      canvas.drawCircle(ec, radius * 0.34,
+          Paint()..color = Colors.white.withValues(alpha: 0.95));
+      if (blink) {
+        canvas.drawLine(ec + Offset(-radius * 0.2, 0), ec + Offset(radius * 0.2, 0),
+            Paint()..color = const Color(0xFF10131F)..strokeWidth = 2.4);
+      } else {
+        canvas.drawCircle(ec + look, radius * 0.16,
+            Paint()..color = const Color(0xFF10131F));
+      }
+    }
+    // little smile
+    canvas.drawArc(
+        Rect.fromCircle(center: Offset(0, radius * 0.28), radius: radius * 0.3),
+        0.4, 2.3, false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.2
+          ..color = const Color(0xEE10131F));
   }
 
   void _emitTrail() {

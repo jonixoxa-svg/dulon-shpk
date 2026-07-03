@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../config/game_config.dart';
 import '../services/audio_service.dart';
+import '../services/meta_service.dart';
 import '../services/progression_service.dart';
 import '../services/storage_service.dart';
 import 'components/background.dart';
@@ -295,6 +296,8 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
     );
     _recordedScore = finalScore;
     _recordedOrbs = _orbsCollected;
+    MetaService.instance.onCombo(_maxCombo);
+    MetaService.instance.onRunEnd(score: finalScore);
 
     _shake(GameConfig.screenShakeIntensity);
     _flashTime = 0.15;
@@ -407,6 +410,7 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
 
   void _enterSector(int s) {
     sectorNotifier.value = s;
+    MetaService.instance.onSector(s);
     final bonus = GameConfig.sectorBonus * _scoreMultiplier;
     _scoreF += bonus;
     AudioService.instance.playSector();
@@ -583,6 +587,9 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
         _scoreF += points;
         _orbsCollected++;
         AudioService.instance.playOrb(combo);
+        MetaService.instance.onOrb();
+        spawnPopup('+1', orb.position + Vector2(26, -6), GameConfig.orbColor,
+            fontSize: 13);
         spawnPopup(
             combo > 1 ? '+$points ×$combo' : '+$points',
             orb.position - Vector2(0, orb.radius * 2),
@@ -629,6 +636,7 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
         final points = GameConfig.nearMissScore * _scoreMultiplier;
         _scoreF += points;
         AudioService.instance.playNearMiss();
+        MetaService.instance.onNearMiss();
         _haptic(HapticFeedback.lightImpact);
         spawnPopup('NEAR MISS +$points',
             ball.position - Vector2(0, ball.radius * 3), GameConfig.textSecondary,
@@ -658,6 +666,7 @@ class OrbitDashGame extends FlameGame with HasTimeScale {
   // ── Power-up effects ─────────────────────────────────────────────────────
 
   void applyPowerUp(PowerUpType type, Vector2 at) {
+    MetaService.instance.onPowerUp();
     AudioService.instance.playPowerUp();
     _haptic(HapticFeedback.mediumImpact);
     spawnPopup(type.label, at - Vector2(0, 30), type.color);

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../../config/ad_config.dart';
+import '../../config/meta_config.dart';
 import '../consent_service.dart';
 import '../storage_service.dart';
 
@@ -54,6 +55,20 @@ class AdService {
         debugPrint('AdService: consent not obtained, ads disabled.');
         return;
       }
+      // ── Google Play FAMILIES compliance (mandatory) ──────────────────
+      // A football-themed game appeals to children, so we default to the
+      // strictest configuration: child-directed treatment ON and max ad
+      // content rating "G". With this tag Google does NOT transmit the
+      // advertising ID and only serves ads from Families self-certified
+      // SDKs. IMPORTANT: the Play Console "Target audience and content"
+      // declaration MUST match this configuration (declare the child age
+      // groups there), or the app gets rejected in review.
+      await MobileAds.instance.updateRequestConfiguration(
+        RequestConfiguration(
+          tagForChildDirectedTreatment: TagForChildDirectedTreatment.yes,
+          maxAdContentRating: MaxAdContentRating.g,
+        ),
+      );
       await MobileAds.instance.initialize();
       _initialized = true;
       _loadInterstitial();
@@ -123,9 +138,19 @@ class AdService {
   ///
   /// [onDismissed] always fires exactly once — immediately when no ad is
   /// shown, or after the user closes the ad.
-  void maybeShowInterstitial({required VoidCallback onDismissed}) {
+  int _interstitialsThisSession = 0;
+
+  /// Families-friendly pacing: at most one interstitial per
+  /// [MetaConfig.interstitialEveryNGameOvers] game overs, hard cap of
+  /// [MetaConfig.interstitialSessionCap] per session, and NEVER right
+  /// after a new-best celebration (pass [suppress] = true) — don't poison
+  /// the dopamine peak.
+  void maybeShowInterstitial(
+      {required VoidCallback onDismissed, bool suppress = false}) {
     final count = StorageService.instance.incrementGameOverCount();
-    final shouldShow = count % AdConfig.interstitialFrequency == 0;
+    final shouldShow = !suppress &&
+        _interstitialsThisSession < MetaConfig.interstitialSessionCap &&
+        count % MetaConfig.interstitialEveryNGameOvers == 0;
     final ad = _interstitialAd;
 
     if (!shouldShow || ad == null) {
@@ -134,6 +159,7 @@ class AdService {
     }
 
     _interstitialAd = null;
+    _interstitialsThisSession++;
     try {
       ad.fullScreenContentCallback = FullScreenContentCallback(
         onAdDismissedFullScreenContent: (ad) {

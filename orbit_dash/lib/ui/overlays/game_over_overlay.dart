@@ -6,7 +6,9 @@ import '../../config/game_config.dart';
 import '../../game/orbit_dash_game.dart';
 import '../../services/ads/ad_service.dart';
 import '../../services/progression_service.dart';
+import '../../services/meta_service.dart';
 import '../../services/storage_service.dart';
+import '../screens/meta_screens.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/neon_button.dart';
 
@@ -100,7 +102,9 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
     if (_busy) return;
     _busy = true;
     _countdown?.cancel();
-    AdService.instance.maybeShowInterstitial(onDismissed: () {
+    AdService.instance.maybeShowInterstitial(
+        suppress: game.isNewBest,
+        onDismissed: () {
       _busy = false;
       game.resetToReady();
     });
@@ -110,7 +114,9 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
     if (_busy) return;
     _busy = true;
     _countdown?.cancel();
-    AdService.instance.maybeShowInterstitial(onDismissed: () {
+    AdService.instance.maybeShowInterstitial(
+        suppress: game.isNewBest,
+        onDismissed: () {
       _busy = false;
       if (mounted) Navigator.of(context).pop();
     });
@@ -154,9 +160,29 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
                       _scoreBlock(),
                       const SizedBox(height: 14),
                       _statsRow(),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 10),
+                      _soCloseBar(),
+                      const SizedBox(height: 10),
                       _xpBlock(),
                       const SizedBox(height: 22),
+                      if (MetaService.instance.capsulesPending > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: NeonButton(
+                            label:
+                                'OPEN CAPSULE (${MetaService.instance.capsulesPending})',
+                            icon: Icons.card_giftcard,
+                            compact: true,
+                            colors: const [
+                              GameConfig.coreColor,
+                              GameConfig.orbColor
+                            ],
+                            onPressed: () async {
+                              await showCapsuleDialog(context);
+                              if (mounted) setState(() {});
+                            },
+                          ),
+                        ),
                       if (_canContinue) ...[
                         NeonButton(
                           label: 'CONTINUE ($_secondsLeft)',
@@ -279,6 +305,38 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
         ),
       ],
     );
+  }
+
+  /// "So close!" calibration: frame the loss as near-success.
+  Widget _soCloseBar() {
+    final best = StorageService.instance.highScore;
+    if (best <= 0 || game.isNewBest) return const SizedBox.shrink();
+    final f = (game.finalScore / best).clamp(0.0, 1.0);
+    return Column(children: [
+      Text('${(f * 100).round()}% of your best — so close!',
+          style: const TextStyle(
+              color: GameConfig.orbColor,
+              fontSize: 13,
+              fontWeight: FontWeight.w800)),
+      const SizedBox(height: 5),
+      SizedBox(
+        width: 220,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: f),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOutCubic,
+            builder: (context, v, child) => LinearProgressIndicator(
+                value: v,
+                minHeight: 6,
+                backgroundColor: Colors.white.withValues(alpha: 0.08),
+                valueColor:
+                    const AlwaysStoppedAnimation(GameConfig.orbColor)),
+          ),
+        ),
+      ),
+    ]);
   }
 
   Widget _statsRow() {
